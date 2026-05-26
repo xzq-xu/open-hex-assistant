@@ -1,0 +1,11 @@
+node_modules
+dist
+.DS_Store
+*.log
+.venv-paddleocr
+runtime/overlay-state.json
+runtime/ocr-config.json
+runtime/ocr-debug
+models/paddleocr/*.onnx
+models/paddleocr/*.tar
+models/paddleocr/ch_PP-OCRv4_rec_infer

@@ -1,0 +1,164 @@
+# Architecture
+
+## Goal
+
+Build an open-source ARAM Mayhem assistant without copying proprietary code or using license/device binding.
+
+## Modules
+
+```mermaid
+flowchart LR
+  LCU["League Client / Live Client"] --> State["Game State"]
+  Screen["Screen Capture"] --> OCR["OCR Adapter"]
+  Stats["Public Stats Cache"] --> Engine["Recommendation Engine"]
+  Meta["Data Dragon + Augment Metadata"] --> Engine
+  State --> Engine
+  OCR --> Engine
+  Engine --> UI["Control Panel / Overlay"]
+  UI --> Shell["Transparent Electron Shell"]
+```
+
+## Recommendation Inputs
+
+- `championId`
+- `currentItems`
+- `selectedAugments`
+- `candidateAugments`
+- `patch`
+
+The current web MVP supports `championId` and `candidateAugments`. Desktop integration should fill the other fields.
+
+## Realtime OCR Boundary
+
+The web MVP already has the text-to-augment matching step:
+
+```text
+OCR text / augment names / augment IDs -> candidate augment IDs -> recommendation engine
+```
+
+Desktop integration should add this adapter:
+
+```ts
+type CandidateAugmentDetection = {
+  id: number
+  name: string
+  confidence: number
+}
+
+async function detectCandidateAugments(frame: ImageData): Promise<CandidateAugmentDetection[]>
+```
+
+Recommended first desktop implementation:
+
+- capture the game window or a user-defined region
+- crop the three augment cards
+- run local OCR on each card title
+- pass recognized text into the existing matcher
+- keep the full pipeline local; no screenshot upload
+
+The implemented worker uses this faster path:
+
+```mermaid
+flowchart LR
+  Capture["screenshot-desktop"] --> Crop["Sharp ROI crops"]
+  Crop --> Rec["PaddleOCR rec ONNX"]
+  Rec --> Json["overlay state JSON / stdout"]
+  Json --> Electron["Electron main process"]
+  Electron --> Overlay["React overlay"]
+```
+
+It uses fixed title ROIs instead of a detector model. That is the correct default for a 500 ms requirement because the three card locations are predictable during augment selection.
+
+## ROI Calibration
+
+Calibration runs as a separate Electron mode:
+
+```bash
+npm run calibrate:dev
+```
+
+The calibration renderer uses a small preload API:
+
+- `captureCalibrationScreen()`: returns a screen PNG and current OCR config
+- `loadOcrConfig()`: reads the effective OCR config
+- `saveOcrConfig(config)`: validates and writes `runtime/ocr-config.json`
+
+The React calibration page only edits ratio-based `titleRoi` rectangles. OCR execution, screen capture, filesystem writes, and config normalization stay in Electron/Node modules.
+
+## Overlay Runtime
+
+The current desktop shell is `electron/main.cjs`. It loads the same React app with `?overlay=1` and creates a transparent, frameless, always-on-top window.
+
+Runtime controls:
+
+- `OVERLAY_CHAMPION`: champion id, for example `777`
+- `OVERLAY_CANDIDATES`: three candidate augment names or ids separated by `|`, comma, semicolon, or newline
+- `OVERLAY_STATE_FILE`: JSON file watched every 500 ms for live OCR results
+- `OCR_ENABLED=1`: start the built-in OCR worker from Electron
+- `OCR_CONFIG`: path to `runtime/ocr-config.json`
+- `OCR_NODE`: optional external Node executable for the OCR worker; by default Electron runs the worker through its own Node runtime
+- `OCR_POLL_MS`: capture interval in milliseconds
+- `OCR_DEBUG=1`: write the cropped card title images to `runtime/ocr-debug`
+- `OVERLAY_CLICK_THROUGH=0`: disable mouse passthrough for testing
+
+Default behavior is mouse passthrough so the overlay does not block in-game clicks. `CommandOrControl+Shift+O` toggles passthrough and `CommandOrControl+Shift+R` reloads the overlay.
+
+The watched JSON file should use this shape:
+
+```json
+{
+  "championId": 777,
+  "candidates": ["秘术冲拳", "质变：棱彩阶", "会心治疗"]
+}
+```
+
+The OCR process can be implemented independently. Its only contract with the recommendation UI is to keep this file updated when the detected champion or the three augment cards change.
+
+## 500 ms Budget
+
+The expected latency budget on a warmed process:
+
+- screen capture: 80-180 ms
+- three ROI crops: 10-30 ms
+- three recognition passes: 60-220 ms on CPU, lower with a small model and good threading
+- JSON bridge and React update: under 20 ms
+
+The first inference after launch is slower because ONNX Runtime initializes and optimizes the graph. Start the worker before queueing so the model is warm by the time the augment selection appears.
+
+## Windows GPU Path
+
+The Windows runtime uses ONNX Runtime Node prebuilt binaries. The practical default is DirectML:
+
+```json
+["dml", "cpu"]
+```
+
+DirectML works with DirectX 12 capable NVIDIA and AMD GPUs and falls back to CPU if the GPU provider is unavailable. CUDA is not the default for this Electron/Node path because the current Windows prebuilt `onnxruntime-node` package supports DML/WebGPU on Windows, while CUDA support is aimed at Linux x64 in the prebuilt Node package.
+
+## Recommendation Outputs
+
+- candidate augment ordering
+- candidate augment grade
+- one-line candidate augment reason
+- regular core items
+- high-win archetype items
+- data source and patch
+
+## Auth Removed
+
+No license server, no device ID binding, and no paid tier branching. If updates are needed, use GitHub Releases and keep update checks optional.
+
+## Clean-Room Boundary
+
+Allowed:
+
+- public web page behavior analysis
+- public API response shape analysis
+- independent implementation of the same user-facing idea
+
+Not allowed:
+
+- copying proprietary source
+- bypassing licensing
+- extracting private keys or service tokens
+- cloning private backend behavior

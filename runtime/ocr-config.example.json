@@ -1,0 +1,33 @@
+{
+  "championId": 777,
+  "model": {
+    "recPath": "models/paddleocr/ch_PP-OCRv4_rec_infer.onnx",
+    "dictPath": "models/paddleocr/ppocr_keys_v1.txt",
+    "inputWidth": 320,
+    "inputHeight": 48,
+    "useSpaceChar": true,
+    "executionProviders": ["dml", "cpu"]
+  },
+  "capture": {
+    "display": 0,
+    "pollMs": 120,
+    "debugDir": "runtime/ocr-debug",
+    "cards": [
+      {
+        "name": "left",
+        "titleRoi": { "unit": "ratio", "x": 0.205, "y": 0.405, "width": 0.17, "height": 0.055 }
+      },
+      {
+        "name": "middle",
+        "titleRoi": { "unit": "ratio", "x": 0.415, "y": 0.405, "width": 0.17, "height": 0.055 }
+      },
+      {
+        "name": "right",
+        "titleRoi": { "unit": "ratio", "x": 0.625, "y": 0.405, "width": 0.17, "height": 0.055 }
+      }
+    ]
+  },
+  "output": {
+    "stateFile": "runtime/overlay-state.json"
+  }
+}
