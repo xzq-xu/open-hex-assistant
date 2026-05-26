@@ -92,10 +92,10 @@ Expected JSON shape:
 The low-latency path is:
 
 ```text
-screen capture -> crop three fixed title ROIs -> PaddleOCR ONNX recognition -> overlay state
+LoL process detection -> lightweight augment-pick screen detection -> crop three fixed title ROIs -> PaddleOCR ONNX recognition -> overlay state
 ```
 
-It intentionally skips full-screen text detection. The three card locations are stable during augment selection, so calibrated title crops are the key to staying near the 500 ms target.
+It intentionally skips full-screen text detection. The continuous worker does not OCR indiscriminately by default: on Windows it first checks for `League of Legends.exe`, then performs lightweight screenshot-based trigger detection while the game is running, and only starts PaddleOCR after the three-choice augment screen is detected. The three card locations are stable during augment selection, so calibrated title crops are the key to staying near the 500 ms target.
 
 Prepare model files:
 
@@ -131,6 +131,16 @@ npm run dev
 npm run overlay:ocr:dev
 ```
 
+The continuous OCR worker uses this state machine:
+
+```text
+idle -> game-running -> augment-pick-active -> game-running -> idle
+```
+
+- `idle`: no LoL game process detected; only low-frequency process checks run.
+- `game-running`: the LoL game process is present; only lightweight screenshot trigger detection runs.
+- `augment-pick-active`: the three-choice augment screen is detected; the worker recognizes the three title ROIs and pushes recommendations.
+
 Calibrate the three title crop rectangles:
 
 ```bash
@@ -143,10 +153,16 @@ In the calibration window, click `截取屏幕`, drag the three title rectangles
 Useful knobs:
 
 ```bash
+npx cross-env OCR_AUTO_GATE=0 npm run overlay:ocr:dev
+npx cross-env OCR_REQUIRE_LEAGUE_PROCESS=0 npm run overlay:ocr:dev
+npx cross-env OCR_FORCE_ACTIVE=1 npm run overlay:ocr:dev
+npx cross-env OCR_IDLE_POLL_MS=1000 OCR_GAME_POLL_MS=180 npm run overlay:ocr:dev
 npx cross-env OCR_POLL_MS=80 npm run overlay:ocr:dev
 npx cross-env OCR_DEBUG=1 npm run ocr:probe
 npx cross-env PADDLEOCR_REC_MODEL=C:/path/rec.onnx PADDLEOCR_DICT=C:/path/ppocr_keys_v1.txt npm run ocr:probe
 ```
+
+`OCR_AUTO_GATE=0` returns to the old continuous-OCR behavior; `OCR_REQUIRE_LEAGUE_PROCESS=0` disables only the LoL process gate; `OCR_FORCE_ACTIVE=1` is for debugging and forces the worker into the recognition phase.
 
 On Windows, the default OCR execution providers are:
 

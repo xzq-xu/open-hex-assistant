@@ -56,18 +56,20 @@ Recommended first desktop implementation:
 - pass recognized text into the existing matcher
 - keep the full pipeline local; no screenshot upload
 
-The implemented worker uses this faster path:
+The implemented worker uses this gated faster path:
 
 ```mermaid
 flowchart LR
-  Capture["screenshot-desktop"] --> Crop["Sharp ROI crops"]
+  Game["LoL process gate"] --> Capture["screenshot-desktop"]
+  Capture --> Trigger["Augment-pick screen trigger"]
+  Trigger --> Crop["Sharp ROI crops"]
   Crop --> Rec["PaddleOCR rec ONNX"]
   Rec --> Json["overlay state JSON / stdout"]
   Json --> Electron["Electron main process"]
   Electron --> Overlay["React overlay"]
 ```
 
-It uses fixed title ROIs instead of a detector model. That is the correct default for a 500 ms requirement because the three card locations are predictable during augment selection.
+It uses fixed title ROIs instead of a detector model. That is the correct default for a 500 ms requirement because the three card locations are predictable during augment selection. The worker does not run PaddleOCR continuously by default: it checks the game process first, then runs a cheap image-statistics trigger over the calibrated title strips, and only runs OCR while the augment picker is active.
 
 ## ROI Calibration
 
@@ -97,6 +99,11 @@ Runtime controls:
 - `OCR_ENABLED=1`: start the built-in OCR worker from Electron
 - `OCR_CONFIG`: path to `runtime/ocr-config.json`
 - `OCR_NODE`: optional external Node executable for the OCR worker; by default Electron runs the worker through its own Node runtime
+- `OCR_AUTO_GATE=0`: disable automatic LoL/augment gating and run continuous OCR
+- `OCR_REQUIRE_LEAGUE_PROCESS=0`: disable only the LoL process gate
+- `OCR_FORCE_ACTIVE=1`: force the worker into the OCR phase for debugging
+- `OCR_IDLE_POLL_MS`: process check interval while LoL is absent
+- `OCR_GAME_POLL_MS`: lightweight trigger interval while LoL is running
 - `OCR_POLL_MS`: capture interval in milliseconds
 - `OCR_DEBUG=1`: write the cropped card title images to `runtime/ocr-debug`
 - `OVERLAY_CLICK_THROUGH=0`: disable mouse passthrough for testing

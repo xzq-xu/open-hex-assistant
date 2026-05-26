@@ -26,6 +26,34 @@ function defaultOcrConfig(env = process.env) {
       debugDir: 'runtime/ocr-debug',
       cards: DEFAULT_CARD_ROIS,
     },
+    automation: {
+      enabled: parseBool(env.OCR_AUTO_GATE, true),
+      forceActive: parseBool(env.OCR_FORCE_ACTIVE, false),
+      requireLeagueProcess: parseBool(env.OCR_REQUIRE_LEAGUE_PROCESS, true),
+      screenGate: parseBool(env.OCR_SCREEN_GATE, true),
+      idlePollMs: Number(env.OCR_IDLE_POLL_MS || 1000),
+      gamePollMs: Number(env.OCR_GAME_POLL_MS || 180),
+      activeHoldMs: Number(env.OCR_ACTIVE_HOLD_MS || 900),
+      processNames: parseList(env.OCR_GAME_PROCESS_NAMES) || [
+        'League of Legends',
+        'League of Legends.exe',
+      ],
+      trigger: {
+        minCards: Number(env.OCR_TRIGGER_MIN_CARDS || 2),
+        cardScoreThreshold: Number(env.OCR_TRIGGER_CARD_SCORE || 1.85),
+        minAverageScore: Number(env.OCR_TRIGGER_AVERAGE_SCORE || 1.55),
+        minBrightness: Number(env.OCR_TRIGGER_MIN_BRIGHTNESS || 0.04),
+        maxBrightness: Number(env.OCR_TRIGGER_MAX_BRIGHTNESS || 0.88),
+        minContrast: Number(env.OCR_TRIGGER_MIN_CONTRAST || 0.08),
+        strongContrast: Number(env.OCR_TRIGGER_STRONG_CONTRAST || 0.22),
+        minEdgeDensity: Number(env.OCR_TRIGGER_MIN_EDGE_DENSITY || 0.012),
+        strongEdgeDensity: Number(env.OCR_TRIGGER_STRONG_EDGE_DENSITY || 0.08),
+        minLightRatio: Number(env.OCR_TRIGGER_MIN_LIGHT_RATIO || 0.01),
+        strongLightRatio: Number(env.OCR_TRIGGER_STRONG_LIGHT_RATIO || 0.12),
+        minDarkRatio: Number(env.OCR_TRIGGER_MIN_DARK_RATIO || 0.02),
+        strongDarkRatio: Number(env.OCR_TRIGGER_STRONG_DARK_RATIO || 0.25),
+      },
+    },
     output: {
       stateFile: '',
     },
@@ -67,6 +95,14 @@ function mergeOcrConfig(base, override = {}) {
       ...(override.capture || {}),
       cards: override.capture?.cards || base.capture.cards,
     },
+    automation: {
+      ...base.automation,
+      ...(override.automation || {}),
+      trigger: {
+        ...base.automation.trigger,
+        ...(override.automation?.trigger || {}),
+      },
+    },
     output: {
       ...base.output,
       ...(override.output || {}),
@@ -93,6 +129,7 @@ function normalizeOcrConfig(config) {
       pollMs: Math.max(50, Math.round(numberOr(config.capture?.pollMs, 120))),
       cards: normalizeCards(config.capture?.cards),
     },
+    automation: normalizeAutomation(config.automation),
     output: {
       ...config.output,
     },
@@ -126,6 +163,42 @@ function normalizeRatioRoi(roi, fallback) {
   }
 }
 
+function normalizeAutomation(automation = {}) {
+  return {
+    ...automation,
+    enabled: automation.enabled !== false,
+    forceActive: automation.forceActive === true,
+    requireLeagueProcess: automation.requireLeagueProcess === true,
+    screenGate: automation.screenGate !== false,
+    idlePollMs: Math.max(250, Math.round(numberOr(automation.idlePollMs, 1000))),
+    gamePollMs: Math.max(100, Math.round(numberOr(automation.gamePollMs, 350))),
+    activeHoldMs: Math.max(0, Math.round(numberOr(automation.activeHoldMs, 900))),
+    processNames: Array.isArray(automation.processNames) && automation.processNames.length
+      ? automation.processNames.map((name) => String(name).trim()).filter(Boolean)
+      : ['League of Legends', 'League of Legends.exe'],
+    trigger: normalizeTrigger(automation.trigger),
+  }
+}
+
+function normalizeTrigger(trigger = {}) {
+  return {
+    ...trigger,
+    minCards: clamp(Math.round(numberOr(trigger.minCards, 2)), 1, 3),
+    cardScoreThreshold: clamp(numberOr(trigger.cardScoreThreshold, 1.85), 0, 4),
+    minAverageScore: clamp(numberOr(trigger.minAverageScore, 1.55), 0, 4),
+    minBrightness: clamp(numberOr(trigger.minBrightness, 0.04), 0, 1),
+    maxBrightness: clamp(numberOr(trigger.maxBrightness, 0.88), 0, 1),
+    minContrast: clamp(numberOr(trigger.minContrast, 0.08), 0, 1),
+    strongContrast: clamp(numberOr(trigger.strongContrast, 0.22), 0, 1),
+    minEdgeDensity: clamp(numberOr(trigger.minEdgeDensity, 0.012), 0, 1),
+    strongEdgeDensity: clamp(numberOr(trigger.strongEdgeDensity, 0.08), 0, 1),
+    minLightRatio: clamp(numberOr(trigger.minLightRatio, 0.01), 0, 1),
+    strongLightRatio: clamp(numberOr(trigger.strongLightRatio, 0.12), 0, 1),
+    minDarkRatio: clamp(numberOr(trigger.minDarkRatio, 0.02), 0, 1),
+    strongDarkRatio: clamp(numberOr(trigger.strongDarkRatio, 0.25), 0, 1),
+  }
+}
+
 function ocrConfigPath(env = process.env) {
   return projectPath(env.OCR_CONFIG || 'runtime/ocr-config.json')
 }
@@ -138,6 +211,20 @@ function projectPath(filePath) {
 function numberOr(value, fallback) {
   const number = Number(value)
   return Number.isFinite(number) ? number : fallback
+}
+
+function parseBool(value, fallback) {
+  if (value == null || value === '') return fallback
+  return !['0', 'false', 'no', 'off'].includes(String(value).trim().toLowerCase())
+}
+
+function parseList(value) {
+  if (!value) return null
+  const items = String(value)
+    .split(/[|,]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+  return items.length ? items : null
 }
 
 function parseExecutionProviders(value) {

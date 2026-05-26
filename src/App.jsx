@@ -339,10 +339,12 @@ function OverlayShell({ selectedChampion, selectedChampionId, recommendation, re
   const candidateAugments = recommendation?.candidateAugments?.slice(0, 3) ?? []
   const ocr = runtimeState?.ocr
   const ocrStatus = ocr?.elapsedMs ? `OCR ${ocr.elapsedMs}ms${ocr.withinTarget === false ? ' 超时' : ''}` : ''
+  const ocrPhaseStatus = ocrPhaseLabel(ocr)
+  const emptyMessage = loading ? '正在加载英雄与海克斯数据' : ocrPhaseStatus || '没有匹配到候选海克斯'
   const status = runtimeState?.error || error || (
     loading
       ? '同步公开统计中'
-      : [ocrStatus, recognizedCandidates.length ? `已识别 ${recognizedCandidates.length}/3` : '等待候选识别'].filter(Boolean).join(' · ')
+      : [ocrStatus || ocrPhaseStatus, recognizedCandidates.length ? `已识别 ${recognizedCandidates.length}/3` : '等待候选识别'].filter(Boolean).join(' · ')
   )
 
   return (
@@ -371,11 +373,20 @@ function OverlayShell({ selectedChampion, selectedChampionId, recommendation, re
             ))}
           </div>
         ) : (
-          <div className="overlay-message">{loading ? '正在加载英雄与海克斯数据' : '没有匹配到候选海克斯'}</div>
+          <div className="overlay-message">{emptyMessage}</div>
         )}
       </section>
     </main>
   )
+}
+
+function ocrPhaseLabel(ocr) {
+  if (!ocr?.phase) return ''
+  if (ocr.phase === 'idle') return '等待 LoL 游戏启动'
+  if (ocr.phase === 'game-running') return '等待海克斯选择'
+  if (ocr.phase === 'augment-pick-active') return '海克斯选择已触发'
+  if (ocr.phase === 'error') return 'OCR 异常'
+  return ''
 }
 
 function OverlayAugment({ augment, rank, staticData }) {

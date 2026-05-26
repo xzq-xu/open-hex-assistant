@@ -92,10 +92,10 @@ JSON 格式：
 低延迟链路如下：
 
 ```text
-屏幕截图 -> 裁剪三个固定标题区域 -> PaddleOCR ONNX 识别 -> overlay 状态
+LoL 进程检测 -> 海克斯选择界面轻量检测 -> 裁剪三个固定标题区域 -> PaddleOCR ONNX 识别 -> overlay 状态
 ```
 
-这里刻意跳过全屏文字检测。海克斯选择界面的三张卡片位置稳定，校准标题区域后直接裁剪识别，是 500ms 目标内完成识别的关键。
+这里刻意跳过全屏文字检测。持续 worker 默认不会无差别 OCR：Windows 上先检测 `League of Legends.exe`，游戏运行后只做轻量截图特征检测，确认进入海克斯三选一界面后才运行 PaddleOCR。海克斯选择界面的三张卡片位置稳定，校准标题区域后直接裁剪识别，是 500ms 目标内完成识别的关键。
 
 准备模型文件：
 
@@ -131,6 +131,16 @@ npm run dev
 npm run overlay:ocr:dev
 ```
 
+持续 OCR worker 的状态机：
+
+```text
+idle -> game-running -> augment-pick-active -> game-running -> idle
+```
+
+- `idle`：未检测到 LoL 游戏进程，只按低频间隔检查。
+- `game-running`：检测到 LoL 游戏进程，只做轻量截图触发检测。
+- `augment-pick-active`：检测到三选一界面，才识别三个标题 ROI 并推送推荐。
+
 校准三个标题裁剪区域：
 
 ```bash
@@ -143,10 +153,16 @@ npm run calibrate:dev
 常用参数：
 
 ```bash
+npx cross-env OCR_AUTO_GATE=0 npm run overlay:ocr:dev
+npx cross-env OCR_REQUIRE_LEAGUE_PROCESS=0 npm run overlay:ocr:dev
+npx cross-env OCR_FORCE_ACTIVE=1 npm run overlay:ocr:dev
+npx cross-env OCR_IDLE_POLL_MS=1000 OCR_GAME_POLL_MS=180 npm run overlay:ocr:dev
 npx cross-env OCR_POLL_MS=80 npm run overlay:ocr:dev
 npx cross-env OCR_DEBUG=1 npm run ocr:probe
 npx cross-env PADDLEOCR_REC_MODEL=C:/path/rec.onnx PADDLEOCR_DICT=C:/path/ppocr_keys_v1.txt npm run ocr:probe
 ```
+
+`OCR_AUTO_GATE=0` 会回到旧的持续 OCR 行为；`OCR_REQUIRE_LEAGUE_PROCESS=0` 只关闭 LoL 进程门控；`OCR_FORCE_ACTIVE=1` 用于调试，直接强制进入识别态。
 
 Windows 默认 OCR execution providers：
 

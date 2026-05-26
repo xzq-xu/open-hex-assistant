@@ -24,6 +24,31 @@ export const DEFAULT_CALIBRATION_CONFIG = {
       { name: 'right', titleRoi: { unit: 'ratio', x: 0.625, y: 0.405, width: 0.17, height: 0.055 } },
     ],
   },
+  automation: {
+    enabled: true,
+    forceActive: false,
+    requireLeagueProcess: true,
+    screenGate: true,
+    idlePollMs: 1000,
+    gamePollMs: 180,
+    activeHoldMs: 900,
+    processNames: ['League of Legends', 'League of Legends.exe'],
+    trigger: {
+      minCards: 2,
+      cardScoreThreshold: 1.85,
+      minAverageScore: 1.55,
+      minBrightness: 0.04,
+      maxBrightness: 0.88,
+      minContrast: 0.08,
+      strongContrast: 0.22,
+      minEdgeDensity: 0.012,
+      strongEdgeDensity: 0.08,
+      minLightRatio: 0.01,
+      strongLightRatio: 0.12,
+      minDarkRatio: 0.02,
+      strongDarkRatio: 0.25,
+    },
+  },
   output: {
     stateFile: 'runtime/overlay-state.json',
   },
@@ -40,6 +65,14 @@ export function normalizeCalibrationConfig(config = {}) {
     capture: {
       ...DEFAULT_CALIBRATION_CONFIG.capture,
       ...(config.capture || {}),
+    },
+    automation: {
+      ...DEFAULT_CALIBRATION_CONFIG.automation,
+      ...(config.automation || {}),
+      trigger: {
+        ...DEFAULT_CALIBRATION_CONFIG.automation.trigger,
+        ...(config.automation?.trigger || {}),
+      },
     },
     output: {
       ...DEFAULT_CALIBRATION_CONFIG.output,
