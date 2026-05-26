@@ -54,6 +54,14 @@ function defaultOcrConfig(env = process.env) {
         strongDarkRatio: Number(env.OCR_TRIGGER_STRONG_DARK_RATIO || 0.25),
       },
     },
+    lcu: {
+      enabled: parseBool(env.LCU_ENABLED, true),
+      requireGameflow: parseBool(env.LCU_REQUIRE_GAMEFLOW, true),
+      lockfilePath: env.LCU_LOCKFILE || '',
+      installDir: env.LCU_INSTALL_DIR || '',
+      pollMs: Number(env.LCU_POLL_MS || 1000),
+      allowedPhases: parseList(env.LCU_ALLOWED_PHASES) || ['InProgress', 'Reconnect'],
+    },
     output: {
       stateFile: '',
     },
@@ -103,6 +111,10 @@ function mergeOcrConfig(base, override = {}) {
         ...(override.automation?.trigger || {}),
       },
     },
+    lcu: {
+      ...base.lcu,
+      ...(override.lcu || {}),
+    },
     output: {
       ...base.output,
       ...(override.output || {}),
@@ -130,6 +142,7 @@ function normalizeOcrConfig(config) {
       cards: normalizeCards(config.capture?.cards),
     },
     automation: normalizeAutomation(config.automation),
+    lcu: normalizeLcu(config.lcu),
     output: {
       ...config.output,
     },
@@ -160,6 +173,20 @@ function normalizeRatioRoi(roi, fallback) {
     y: round(y, 5),
     width: round(width, 5),
     height: round(height, 5),
+  }
+}
+
+function normalizeLcu(lcu = {}) {
+  return {
+    ...lcu,
+    enabled: lcu.enabled !== false,
+    requireGameflow: lcu.requireGameflow !== false,
+    lockfilePath: String(lcu.lockfilePath || ''),
+    installDir: String(lcu.installDir || ''),
+    pollMs: Math.max(250, Math.round(numberOr(lcu.pollMs, 1000))),
+    allowedPhases: Array.isArray(lcu.allowedPhases) && lcu.allowedPhases.length
+      ? lcu.allowedPhases.map((phase) => String(phase).trim()).filter(Boolean)
+      : ['InProgress', 'Reconnect'],
   }
 }
 

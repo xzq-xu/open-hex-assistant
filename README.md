@@ -92,10 +92,10 @@ JSON 格式：
 低延迟链路如下：
 
 ```text
-LoL 进程检测 -> 海克斯选择界面轻量检测 -> 裁剪三个固定标题区域 -> PaddleOCR ONNX 识别 -> overlay 状态
+LCU gameflow/英雄识别 -> 海克斯选择界面轻量检测 -> 裁剪三个固定标题区域 -> PaddleOCR ONNX 识别 -> overlay 状态
 ```
 
-这里刻意跳过全屏文字检测。持续 worker 默认不会无差别 OCR：Windows 上先检测 `League of Legends.exe`，游戏运行后只做轻量截图特征检测，确认进入海克斯三选一界面后才运行 PaddleOCR。海克斯选择界面的三张卡片位置稳定，校准标题区域后直接裁剪识别，是 500ms 目标内完成识别的关键。
+这里刻意跳过全屏文字检测。持续 worker 默认不会无差别 OCR：它会先连接 LCU，读取 gameflow 和当前英雄；只有 LCU 进入 `InProgress` / `Reconnect` 后，才开始做轻量截图特征检测；确认进入海克斯三选一界面后才运行 PaddleOCR。海克斯选择界面的三张卡片位置稳定，校准标题区域后直接裁剪识别，是 500ms 目标内完成识别的关键。
 
 准备模型文件：
 
@@ -134,11 +134,12 @@ npm run overlay:ocr:dev
 持续 OCR worker 的状态机：
 
 ```text
-idle -> game-running -> augment-pick-active -> game-running -> idle
+lcu-disconnected -> lcu-waiting -> game-running -> augment-pick-active -> game-running
 ```
 
-- `idle`：未检测到 LoL 游戏进程，只按低频间隔检查。
-- `game-running`：检测到 LoL 游戏进程，只做轻量截图触发检测。
+- `lcu-disconnected`：未检测到 League Client lockfile，等待客户端启动。
+- `lcu-waiting`：LCU 已连接，但 gameflow 还没有进入游戏中。
+- `game-running`：LCU 已进入游戏中，只做轻量截图触发检测。
 - `augment-pick-active`：检测到三选一界面，才识别三个标题 ROI 并推送推荐。
 
 校准三个标题裁剪区域：
@@ -153,6 +154,10 @@ npm run calibrate:dev
 常用参数：
 
 ```bash
+npx cross-env LCU_ENABLED=0 npm run overlay:ocr:dev
+npx cross-env LCU_REQUIRE_GAMEFLOW=0 npm run overlay:ocr:dev
+npx cross-env LCU_LOCKFILE="C:/Riot Games/League of Legends/lockfile" npm run overlay:ocr:dev
+npx cross-env LCU_ALLOWED_PHASES=InProgress,Reconnect npm run overlay:ocr:dev
 npx cross-env OCR_AUTO_GATE=0 npm run overlay:ocr:dev
 npx cross-env OCR_REQUIRE_LEAGUE_PROCESS=0 npm run overlay:ocr:dev
 npx cross-env OCR_FORCE_ACTIVE=1 npm run overlay:ocr:dev
@@ -162,7 +167,7 @@ npx cross-env OCR_DEBUG=1 npm run ocr:probe
 npx cross-env PADDLEOCR_REC_MODEL=C:/path/rec.onnx PADDLEOCR_DICT=C:/path/ppocr_keys_v1.txt npm run ocr:probe
 ```
 
-`OCR_AUTO_GATE=0` 会回到旧的持续 OCR 行为；`OCR_REQUIRE_LEAGUE_PROCESS=0` 只关闭 LoL 进程门控；`OCR_FORCE_ACTIVE=1` 用于调试，直接强制进入识别态。
+`LCU_ENABLED=0` 会关闭 LCU 门控并回退到进程/画面检测；`LCU_REQUIRE_GAMEFLOW=0` 会让 LCU 断开时仍允许旧门控继续工作；`OCR_AUTO_GATE=0` 会回到旧的持续 OCR 行为；`OCR_FORCE_ACTIVE=1` 用于调试，直接强制进入识别态。
 
 Windows 默认 OCR execution providers：
 

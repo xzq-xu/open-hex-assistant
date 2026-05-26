@@ -52,6 +52,14 @@
       "strongDarkRatio": 0.25
     }
   },
+  "lcu": {
+    "enabled": true,
+    "requireGameflow": true,
+    "lockfilePath": "",
+    "installDir": "",
+    "pollMs": 1000,
+    "allowedPhases": ["InProgress", "Reconnect"]
+  },
   "output": {
     "stateFile": "runtime/overlay-state.json"
   }

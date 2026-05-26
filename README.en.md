@@ -92,10 +92,10 @@ Expected JSON shape:
 The low-latency path is:
 
 ```text
-LoL process detection -> lightweight augment-pick screen detection -> crop three fixed title ROIs -> PaddleOCR ONNX recognition -> overlay state
+LCU gameflow/champion detection -> lightweight augment-pick screen detection -> crop three fixed title ROIs -> PaddleOCR ONNX recognition -> overlay state
 ```
 
-It intentionally skips full-screen text detection. The continuous worker does not OCR indiscriminately by default: on Windows it first checks for `League of Legends.exe`, then performs lightweight screenshot-based trigger detection while the game is running, and only starts PaddleOCR after the three-choice augment screen is detected. The three card locations are stable during augment selection, so calibrated title crops are the key to staying near the 500 ms target.
+It intentionally skips full-screen text detection. The continuous worker does not OCR indiscriminately by default: it first connects to LCU, reads gameflow and the current champion, and only starts lightweight screenshot trigger detection after LCU reaches `InProgress` / `Reconnect`. PaddleOCR starts only after the three-choice augment screen is detected. The three card locations are stable during augment selection, so calibrated title crops are the key to staying near the 500 ms target.
 
 Prepare model files:
 
@@ -134,11 +134,12 @@ npm run overlay:ocr:dev
 The continuous OCR worker uses this state machine:
 
 ```text
-idle -> game-running -> augment-pick-active -> game-running -> idle
+lcu-disconnected -> lcu-waiting -> game-running -> augment-pick-active -> game-running
 ```
 
-- `idle`: no LoL game process detected; only low-frequency process checks run.
-- `game-running`: the LoL game process is present; only lightweight screenshot trigger detection runs.
+- `lcu-disconnected`: no League Client lockfile detected; the worker waits for the client.
+- `lcu-waiting`: LCU is connected, but gameflow has not entered an in-game phase.
+- `game-running`: LCU is in-game; only lightweight screenshot trigger detection runs.
 - `augment-pick-active`: the three-choice augment screen is detected; the worker recognizes the three title ROIs and pushes recommendations.
 
 Calibrate the three title crop rectangles:
@@ -153,6 +154,10 @@ In the calibration window, click `截取屏幕`, drag the three title rectangles
 Useful knobs:
 
 ```bash
+npx cross-env LCU_ENABLED=0 npm run overlay:ocr:dev
+npx cross-env LCU_REQUIRE_GAMEFLOW=0 npm run overlay:ocr:dev
+npx cross-env LCU_LOCKFILE="C:/Riot Games/League of Legends/lockfile" npm run overlay:ocr:dev
+npx cross-env LCU_ALLOWED_PHASES=InProgress,Reconnect npm run overlay:ocr:dev
 npx cross-env OCR_AUTO_GATE=0 npm run overlay:ocr:dev
 npx cross-env OCR_REQUIRE_LEAGUE_PROCESS=0 npm run overlay:ocr:dev
 npx cross-env OCR_FORCE_ACTIVE=1 npm run overlay:ocr:dev
@@ -162,7 +167,7 @@ npx cross-env OCR_DEBUG=1 npm run ocr:probe
 npx cross-env PADDLEOCR_REC_MODEL=C:/path/rec.onnx PADDLEOCR_DICT=C:/path/ppocr_keys_v1.txt npm run ocr:probe
 ```
 
-`OCR_AUTO_GATE=0` returns to the old continuous-OCR behavior; `OCR_REQUIRE_LEAGUE_PROCESS=0` disables only the LoL process gate; `OCR_FORCE_ACTIVE=1` is for debugging and forces the worker into the recognition phase.
+`LCU_ENABLED=0` disables LCU gating and falls back to process/screen gating; `LCU_REQUIRE_GAMEFLOW=0` allows the old gates to continue when LCU is disconnected; `OCR_AUTO_GATE=0` returns to the old continuous-OCR behavior; `OCR_FORCE_ACTIVE=1` is for debugging and forces the worker into the recognition phase.
 
 On Windows, the default OCR execution providers are:
 

@@ -382,6 +382,8 @@ function OverlayShell({ selectedChampion, selectedChampionId, recommendation, re
 
 function ocrPhaseLabel(ocr) {
   if (!ocr?.phase) return ''
+  if (ocr.phase === 'lcu-disconnected') return '等待 League Client'
+  if (ocr.phase === 'lcu-waiting') return `等待游戏中${ocr.lcu?.phase ? ` (${ocr.lcu.phase})` : ''}`
   if (ocr.phase === 'idle') return '等待 LoL 游戏启动'
   if (ocr.phase === 'game-running') return '等待海克斯选择'
   if (ocr.phase === 'augment-pick-active') return '海克斯选择已触发'

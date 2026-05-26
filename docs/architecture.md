@@ -60,7 +60,8 @@ The implemented worker uses this gated faster path:
 
 ```mermaid
 flowchart LR
-  Game["LoL process gate"] --> Capture["screenshot-desktop"]
+  LCU["LCU HTTP + WebSocket"] --> Game["Gameflow + champion gate"]
+  Game --> Capture["screenshot-desktop"]
   Capture --> Trigger["Augment-pick screen trigger"]
   Trigger --> Crop["Sharp ROI crops"]
   Crop --> Rec["PaddleOCR rec ONNX"]
@@ -69,7 +70,7 @@ flowchart LR
   Electron --> Overlay["React overlay"]
 ```
 
-It uses fixed title ROIs instead of a detector model. That is the correct default for a 500 ms requirement because the three card locations are predictable during augment selection. The worker does not run PaddleOCR continuously by default: it checks the game process first, then runs a cheap image-statistics trigger over the calibrated title strips, and only runs OCR while the augment picker is active.
+It uses fixed title ROIs instead of a detector model. That is the correct default for a 500 ms requirement because the three card locations are predictable during augment selection. The worker does not run PaddleOCR continuously by default: it connects to LCU over HTTP/WebSocket, waits for an in-game gameflow phase, resolves the local champion, then runs a cheap image-statistics trigger over the calibrated title strips, and only runs OCR while the augment picker is active.
 
 ## ROI Calibration
 
@@ -93,6 +94,11 @@ The current desktop shell is `electron/main.cjs`. It loads the same React app wi
 
 Runtime controls:
 
+- `LCU_ENABLED=0`: disable LCU integration and use the process/screen fallback gate
+- `LCU_REQUIRE_GAMEFLOW=0`: allow fallback gates to continue when LCU is disconnected
+- `LCU_LOCKFILE`: explicit path to the League Client lockfile
+- `LCU_INSTALL_DIR`: explicit League install directory containing `lockfile`
+- `LCU_ALLOWED_PHASES`: comma-separated in-game phases, defaults to `InProgress,Reconnect`
 - `OVERLAY_CHAMPION`: champion id, for example `777`
 - `OVERLAY_CANDIDATES`: three candidate augment names or ids separated by `|`, comma, semicolon, or newline
 - `OVERLAY_STATE_FILE`: JSON file watched every 500 ms for live OCR results

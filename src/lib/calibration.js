@@ -49,6 +49,14 @@ export const DEFAULT_CALIBRATION_CONFIG = {
       strongDarkRatio: 0.25,
     },
   },
+  lcu: {
+    enabled: true,
+    requireGameflow: true,
+    lockfilePath: '',
+    installDir: '',
+    pollMs: 1000,
+    allowedPhases: ['InProgress', 'Reconnect'],
+  },
   output: {
     stateFile: 'runtime/overlay-state.json',
   },
@@ -73,6 +81,10 @@ export function normalizeCalibrationConfig(config = {}) {
         ...DEFAULT_CALIBRATION_CONFIG.automation.trigger,
         ...(config.automation?.trigger || {}),
       },
+    },
+    lcu: {
+      ...DEFAULT_CALIBRATION_CONFIG.lcu,
+      ...(config.lcu || {}),
     },
     output: {
       ...DEFAULT_CALIBRATION_CONFIG.output,

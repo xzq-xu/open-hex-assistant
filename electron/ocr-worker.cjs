@@ -1,5 +1,6 @@
 const fs = require('node:fs')
 const path = require('node:path')
+const { LcuGameState } = require('./lcu/game-state.cjs')
 const { detectAugmentSelection } = require('./ocr/augment-screen-detector.cjs')
 const { loadOcrConfig, projectPath } = require('./ocr/config.cjs')
 const { detectLeagueGame } = require('./ocr/game-detector.cjs')
@@ -39,10 +40,10 @@ async function main() {
     return
   }
 
-  runLoop(config, recognizer)
+  runLoop(config, recognizer, new LcuGameState(config.lcu))
 }
 
-function runLoop(config, recognizer) {
+function runLoop(config, recognizer, lcuGameState) {
   const loopState = {
     running: false,
     lastActiveAt: 0,
@@ -56,7 +57,7 @@ function runLoop(config, recognizer) {
     loopState.running = true
     let nextPollMs = config.capture.pollMs
     try {
-      nextPollMs = await runGatedFrame(config, recognizer, loopState)
+      nextPollMs = await runGatedFrame(config, recognizer, loopState, lcuGameState)
     } catch (error) {
       emitState(config, {
         error: `OCR failed: ${error.message}`,
@@ -78,7 +79,7 @@ function runLoop(config, recognizer) {
   tick()
 }
 
-async function runGatedFrame(config, recognizer, loopState) {
+async function runGatedFrame(config, recognizer, loopState, lcuGameState) {
   const automation = config.automation
   if (!automation?.enabled) {
     await runOnce(config, recognizer)
@@ -86,10 +87,29 @@ async function runGatedFrame(config, recognizer, loopState) {
   }
 
   const scanStartedAt = performance.now()
-  const game = await detectLeagueGame(automation)
+  const lcu = await lcuGameState.snapshot()
+  if (lcu.enabled && !lcu.allowed) {
+    emitPassiveState(config, loopState, lcu.connected ? 'lcu-waiting' : 'lcu-disconnected', {
+      lcu,
+      scanElapsedMs: Math.round(performance.now() - scanStartedAt),
+    })
+    return lcu.connected ? config.lcu.pollMs : automation.idlePollMs
+  }
+
+  const game = lcu.enabled && lcu.connected
+    ? {
+      running: true,
+      activeWindow: true,
+      platform: process.platform,
+      reason: 'lcu-gameflow-allowed',
+      lcu,
+    }
+    : await detectLeagueGame(automation)
+
   if (!game.running) {
     emitPassiveState(config, loopState, 'idle', {
       game,
+      lcu,
       scanElapsedMs: Math.round(performance.now() - scanStartedAt),
     })
     return automation.idlePollMs
@@ -109,6 +129,7 @@ async function runGatedFrame(config, recognizer, loopState) {
   if (!active) {
     emitPassiveState(config, loopState, 'game-running', {
       game,
+      lcu,
       trigger,
       screen: trigger.screen,
       scanElapsedMs: Math.round(performance.now() - scanStartedAt),
@@ -117,7 +138,9 @@ async function runGatedFrame(config, recognizer, loopState) {
   }
 
   await recognizeFrame(config, recognizer, screenBuffer, {
+    championId: lcu.championId,
     game,
+    lcu,
     trigger: {
       ...trigger,
       active,
@@ -182,7 +205,7 @@ async function recognizeFrame(config, recognizer, screenBuffer, context = {}) {
   const elapsedMs = Math.round(performance.now() - startedAt)
 
   emitState(config, {
-    championId: config.championId,
+    championId: context.championId || config.championId,
     candidates,
     ocr: {
       ready: true,
@@ -196,6 +219,7 @@ async function recognizeFrame(config, recognizer, screenBuffer, context = {}) {
       screen,
       cards,
       game: context.game,
+      lcu: context.lcu,
       trigger: context.trigger,
     },
   })
@@ -218,7 +242,7 @@ function emitPassiveState(config, loopState, phase, details = {}) {
   loopState.lastPassiveEmitAt = now
 
   emitState(config, {
-    championId: config.championId,
+    championId: details.lcu?.championId || config.championId,
     candidates: [],
     ocr: {
       ready: true,
@@ -227,6 +251,7 @@ function emitPassiveState(config, loopState, phase, details = {}) {
       active: false,
       targetMs: 500,
       scanElapsedMs: details.scanElapsedMs,
+      lcu: details.lcu,
       game: details.game,
       trigger: details.trigger,
       screen: details.screen,
