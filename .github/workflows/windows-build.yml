@@ -18,9 +18,6 @@ on:
       - 'index.html'
       - 'vite.config.js'
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   package-windows:
     name: Package Windows x64
@@ -28,10 +25,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20.19'
           cache: npm
@@ -43,7 +40,7 @@ jobs:
         run: npm run pack:win
 
       - name: Upload package artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: open-hex-assistant-win-x64
           path: release/*win-x64.zip
