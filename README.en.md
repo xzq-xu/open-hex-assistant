@@ -188,13 +188,20 @@ For the 500 ms target, keep League in borderless/windowed mode, calibrate `runti
 
 Build Windows packages on Windows. This project depends on platform-specific native modules such as `sharp`, `onnxruntime-node`, and `screenshot-desktop`; macOS is fine for development and pushing code, but it should not be the primary environment for producing Windows artifacts.
 
-GitHub Actions packaging:
+GitHub Release packaging:
 
-1. Open the repository `Actions` page.
-2. Select `Windows Build`.
-3. Click `Run workflow`.
-4. Download the `open-hex-assistant-win-x64` artifact.
-5. Copy the zip to the Windows machine, unzip it, and run `Open Hex Assistant.exe`.
+1. Update the `package.json` version and commit it to `main`.
+2. Push a version tag, for example `v0.1.0`.
+3. The `Windows Release` workflow packages the app on a Windows runner.
+4. The workflow creates the matching GitHub Release and uploads `Open Hex Assistant-0.1.0-win-x64.zip`.
+5. Users download the zip from the Releases page, unzip it, and run `Open Hex Assistant.exe`.
+
+Regular `main` pushes do not trigger packaging. The tag must match the `package.json` version. For example, when `package.json` is `0.1.0`, the tag must be `v0.1.0`:
+
+```bash
+npm version patch
+git push origin main --follow-tags
+```
 
 Local Windows packaging:
 
@@ -227,4 +234,4 @@ This project is licensed under the [MIT License](LICENSE).
 ## Next Steps
 
 - Add item + augment conditional rules for strong archetypes such as Destroying Ritual and Critical Healing.
-- Add signed Windows installers and automated release publishing.
+- Add signed Windows installers.

@@ -150,7 +150,9 @@ DirectML works with DirectX 12 capable NVIDIA and AMD GPUs and falls back to CPU
 
 ## Windows Packaging
 
-Windows artifacts are built with Electron Builder on `windows-latest` through `.github/workflows/windows-build.yml`. The primary artifact is a portable zip target, not an installer:
+Windows artifacts are built with Electron Builder on `windows-latest` through `.github/workflows/windows-build.yml`. The workflow only runs for pushed version tags matching `v*`; regular `main` pushes do not package the app.
+
+The tag must match `package.json` exactly with a leading `v`, for example `v0.1.0` for package version `0.1.0`. After packaging, the workflow creates or updates the matching GitHub Release and uploads the portable zip target:
 
 ```text
 release/Open Hex Assistant-0.1.0-win-x64.zip

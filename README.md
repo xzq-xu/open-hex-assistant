@@ -188,13 +188,20 @@ npx cross-env OCR_EXECUTION_PROVIDERS=dml,cpu npm run overlay:ocr:dev
 
 推荐在 Windows 环境打包。项目依赖 `sharp`、`onnxruntime-node`、`screenshot-desktop` 等平台相关原生模块；macOS 可以开发和推送代码，但不建议直接在 macOS 上交叉打 Windows 包。
 
-GitHub Actions 打包：
+GitHub Release 打包：
 
-1. 打开仓库的 `Actions` 页面。
-2. 选择 `Windows Build`。
-3. 点击 `Run workflow`。
-4. 下载 `open-hex-assistant-win-x64` artifact。
-5. 把 zip 复制到 Windows 电脑，解压后运行 `Open Hex Assistant.exe`。
+1. 更新 `package.json` 版本并提交到 `main`。
+2. 推送版本 tag，例如 `v0.1.0`。
+3. `Windows Release` 工作流会在 Windows runner 上打包。
+4. 工作流会创建对应 GitHub Release，并上传 `Open Hex Assistant-0.1.0-win-x64.zip`。
+5. 用户从 Releases 页面下载 zip，解压后运行 `Open Hex Assistant.exe`。
+
+日常推送 `main` 不会触发打包。tag 必须和 `package.json` 版本一致，例如 `package.json` 是 `0.1.0` 时只能推 `v0.1.0`：
+
+```bash
+npm version patch
+git push origin main --follow-tags
+```
 
 Windows 本机打包：
 
@@ -227,4 +234,4 @@ release/Open Hex Assistant-0.1.0-win-x64.zip
 ## 后续计划
 
 - 为关键流派补充装备 + 海克斯条件规则，例如 Destroying Ritual、Critical Healing 等。
-- 为 Windows 构建补充签名安装包和自动发布流程。
+- 为 Windows 构建补充签名安装包。
