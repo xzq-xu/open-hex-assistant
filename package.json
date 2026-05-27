@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "electron/main.cjs",
+  "author": "xzq-xu <1325732643@qq.com>",
   "description": "Clean-room open-source ARAM Mayhem recommendation prototype without license or device binding.",
   "license": "MIT",
   "engines": {
@@ -18,7 +20,10 @@
     "calibrate:dev": "cross-env APP_MODE=calibrate VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron electron/main.cjs",
     "calibrate:dist": "npm run build && cross-env APP_MODE=calibrate electron electron/main.cjs",
     "ocr:models": "node scripts/prepare-paddleocr-models.mjs",
-    "ocr:probe": "cross-env OCR_ONCE=1 node electron/ocr-worker.cjs"
+    "ocr:probe": "cross-env OCR_ONCE=1 node electron/ocr-worker.cjs",
+    "package:check": "node scripts/check-package-inputs.mjs",
+    "pack:win": "npm run ocr:models && npm run build && npm run package:check && electron-builder --win zip --x64 --publish never",
+    "pack:win:dir": "npm run ocr:models && npm run build && npm run package:check && electron-builder --win dir --x64 --publish never"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",
@@ -33,6 +38,52 @@
     "@vitejs/plugin-react": "^5.0.0",
     "cross-env": "^10.1.0",
     "electron": "^42.2.0",
+    "electron-builder": "^26.8.1",
     "vite": "^7.0.0"
+  },
+  "build": {
+    "appId": "com.openhexassistant.desktop",
+    "productName": "Open Hex Assistant",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "models/paddleocr",
+        "to": "models/paddleocr",
+        "filter": [
+          "*.onnx",
+          "*.txt",
+          "README.md"
+        ]
+      },
+      {
+        "from": "runtime/ocr-config.example.json",
+        "to": "runtime/ocr-config.example.json"
+      }
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/**/*.node",
+      "node_modules/onnxruntime-node/bin/**/*",
+      "node_modules/sharp/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-${version}-win-${arch}.${ext}",
+      "forceCodeSigning": false
+    }
   }
 }

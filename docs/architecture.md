@@ -148,6 +148,25 @@ The Windows runtime uses ONNX Runtime Node prebuilt binaries. The practical defa
 
 DirectML works with DirectX 12 capable NVIDIA and AMD GPUs and falls back to CPU if the GPU provider is unavailable. CUDA is not the default for this Electron/Node path because the current Windows prebuilt `onnxruntime-node` package supports DML/WebGPU on Windows, while CUDA support is aimed at Linux x64 in the prebuilt Node package.
 
+## Windows Packaging
+
+Windows artifacts are built with Electron Builder on `windows-latest` through `.github/workflows/windows-build.yml`. The primary artifact is a portable zip target, not an installer:
+
+```text
+release/Open Hex Assistant-0.1.0-win-x64.zip
+```
+
+The package includes:
+
+- Electron runtime
+- production Node dependencies and native Windows binaries
+- `dist/` renderer assets
+- Electron main/worker code
+- PaddleOCR ONNX model and dictionary as extra resources
+- OCR example config as an extra resource
+
+Runtime config and OCR state should be written under Electron's user-data directory in packaged builds. Model and dictionary paths resolve from `process.resourcesPath`, while development builds continue to resolve relative to the project root.
+
 ## Recommendation Outputs
 
 - candidate augment ordering

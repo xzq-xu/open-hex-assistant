@@ -184,6 +184,33 @@ npx cross-env OCR_EXECUTION_PROVIDERS=dml,cpu npm run overlay:ocr:dev
 
 For the 500 ms target, keep League in borderless/windowed mode, calibrate `runtime/ocr-config.json` to crop only the three title strips, and keep the worker running so the ONNX session is already warmed.
 
+## Windows Packaging
+
+Build Windows packages on Windows. This project depends on platform-specific native modules such as `sharp`, `onnxruntime-node`, and `screenshot-desktop`; macOS is fine for development and pushing code, but it should not be the primary environment for producing Windows artifacts.
+
+GitHub Actions packaging:
+
+1. Open the repository `Actions` page.
+2. Select `Windows Build`.
+3. Click `Run workflow`.
+4. Download the `open-hex-assistant-win-x64` artifact.
+5. Copy the zip to the Windows machine, unzip it, and run `Open Hex Assistant.exe`.
+
+Local Windows packaging:
+
+```powershell
+npm ci
+npm run pack:win
+```
+
+The package is written to:
+
+```text
+release/Open Hex Assistant-0.1.0-win-x64.zip
+```
+
+The zip includes Electron, Windows native dependencies, the PaddleOCR ONNX model, and the dictionary. The Windows machine only needs to unzip and run it; Node.js and GitHub access are not required. Runtime configuration and state are written to the user-data directory, so the program directory can remain read-only.
+
 ## No Auth Design
 
 There is no license-key check path. Future desktop builds should keep user identity out of the core recommendation pipeline:
@@ -200,4 +227,4 @@ This project is licensed under the [MIT License](LICENSE).
 ## Next Steps
 
 - Add item + augment conditional rules for strong archetypes such as Destroying Ritual and Critical Healing.
-- Package Windows builds from GitHub Actions.
+- Add signed Windows installers and automated release publishing.

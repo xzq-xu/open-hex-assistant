@@ -184,6 +184,33 @@ npx cross-env OCR_EXECUTION_PROVIDERS=dml,cpu npm run overlay:ocr:dev
 
 想接近 500ms 目标，请保持游戏为无边框/窗口模式，把 `runtime/ocr-config.json` 只校准到三个标题文字条，并提前启动 worker，让 ONNX session 保持预热。
 
+## Windows 打包
+
+推荐在 Windows 环境打包。项目依赖 `sharp`、`onnxruntime-node`、`screenshot-desktop` 等平台相关原生模块；macOS 可以开发和推送代码，但不建议直接在 macOS 上交叉打 Windows 包。
+
+GitHub Actions 打包：
+
+1. 打开仓库的 `Actions` 页面。
+2. 选择 `Windows Build`。
+3. 点击 `Run workflow`。
+4. 下载 `open-hex-assistant-win-x64` artifact。
+5. 把 zip 复制到 Windows 电脑，解压后运行 `Open Hex Assistant.exe`。
+
+Windows 本机打包：
+
+```powershell
+npm ci
+npm run pack:win
+```
+
+产物会生成在：
+
+```text
+release/Open Hex Assistant-0.1.0-win-x64.zip
+```
+
+这个 zip 会包含 Electron、Windows 原生依赖、PaddleOCR ONNX 模型和字典。Windows 电脑只需要解压运行，不需要安装 Node.js，也不需要连接 GitHub。首次运行后的配置和运行态文件会写入用户数据目录，程序目录可以保持只读。
+
 ## 无授权设计
 
 项目没有授权码校验路径。未来桌面构建也应把用户身份排除在核心推荐链路之外：
@@ -200,4 +227,4 @@ npx cross-env OCR_EXECUTION_PROVIDERS=dml,cpu npm run overlay:ocr:dev
 ## 后续计划
 
 - 为关键流派补充装备 + 海克斯条件规则，例如 Destroying Ritual、Critical Healing 等。
-- 通过 GitHub Actions 打包 Windows 构建。
+- 为 Windows 构建补充签名安装包和自动发布流程。

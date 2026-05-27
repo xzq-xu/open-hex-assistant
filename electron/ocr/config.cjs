@@ -1,7 +1,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
-const PROJECT_ROOT = path.join(__dirname, '..', '..')
+const SOURCE_ROOT = path.join(__dirname, '..', '..')
 const DEFAULT_CARD_ROIS = [
   { name: 'left', titleRoi: { unit: 'ratio', x: 0.205, y: 0.405, width: 0.17, height: 0.055 } },
   { name: 'middle', titleRoi: { unit: 'ratio', x: 0.415, y: 0.405, width: 0.17, height: 0.055 } },
@@ -227,12 +227,36 @@ function normalizeTrigger(trigger = {}) {
 }
 
 function ocrConfigPath(env = process.env) {
-  return projectPath(env.OCR_CONFIG || 'runtime/ocr-config.json')
+  return writablePath(env.OCR_CONFIG || 'runtime/ocr-config.json', env)
 }
 
-function projectPath(filePath) {
+function projectPath(filePath, env = process.env) {
   if (!filePath) return ''
-  return path.isAbsolute(filePath) ? filePath : path.join(PROJECT_ROOT, filePath)
+  if (path.isAbsolute(filePath)) return filePath
+
+  const candidates = [
+    path.join(appRoot(env), filePath),
+    path.join(resourceRoot(env), filePath),
+    path.join(SOURCE_ROOT, filePath),
+  ]
+  return candidates.find((candidate) => fs.existsSync(candidate)) || candidates[0]
+}
+
+function writablePath(filePath, env = process.env) {
+  if (!filePath) return ''
+  return path.isAbsolute(filePath) ? filePath : path.join(userDataRoot(env), filePath)
+}
+
+function appRoot(env = process.env) {
+  return env.OPEN_HEX_APP_ROOT || SOURCE_ROOT
+}
+
+function resourceRoot(env = process.env) {
+  return env.OPEN_HEX_RESOURCE_ROOT || appRoot(env)
+}
+
+function userDataRoot(env = process.env) {
+  return env.OPEN_HEX_USER_DATA || appRoot(env)
 }
 
 function numberOr(value, fallback) {
@@ -274,11 +298,12 @@ function round(value, digits) {
 
 module.exports = {
   DEFAULT_CARD_ROIS,
-  PROJECT_ROOT,
+  PROJECT_ROOT: SOURCE_ROOT,
   defaultOcrConfig,
   loadOcrConfig,
   normalizeOcrConfig,
   ocrConfigPath,
   projectPath,
   saveOcrConfig,
+  writablePath,
 }

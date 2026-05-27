@@ -2,7 +2,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { LcuGameState } = require('./lcu/game-state.cjs')
 const { detectAugmentSelection } = require('./ocr/augment-screen-detector.cjs')
-const { loadOcrConfig, projectPath } = require('./ocr/config.cjs')
+const { loadOcrConfig, projectPath, writablePath } = require('./ocr/config.cjs')
 const { detectLeagueGame } = require('./ocr/game-detector.cjs')
 const { PaddleOcrRecognizer } = require('./ocr/paddle-recognizer.cjs')
 const { captureScreen, cropRegions } = require('./ocr/screen-reader.cjs')
@@ -117,7 +117,7 @@ async function runGatedFrame(config, recognizer, loopState, lcuGameState) {
 
   const screenBuffer = await captureScreen(config.capture.display)
   const debugDir = process.env.OCR_DEBUG === '1'
-    ? projectPath(config.capture.debugDir || 'runtime/ocr-debug')
+    ? writablePath(config.capture.debugDir || 'runtime/ocr-debug')
     : ''
   const trigger = await detectTrigger(screenBuffer, config, debugDir)
 
@@ -185,7 +185,7 @@ async function runOnce(config, recognizer) {
 async function recognizeFrame(config, recognizer, screenBuffer, context = {}) {
   const startedAt = context.startedAt || performance.now()
   const debugDir = process.env.OCR_DEBUG === '1'
-    ? projectPath(config.capture.debugDir || 'runtime/ocr-debug')
+    ? writablePath(config.capture.debugDir || 'runtime/ocr-debug')
     : ''
   const { screen, crops } = await cropRegions(screenBuffer, config.capture.cards, debugDir)
 
@@ -269,7 +269,7 @@ function emitState(config, state) {
 
   const stateFile = process.env.OVERLAY_STATE_FILE || config.output?.stateFile
   if (stateFile) {
-    const resolvedStateFile = projectPath(stateFile)
+    const resolvedStateFile = writablePath(stateFile)
     fs.mkdirSync(path.dirname(resolvedStateFile), { recursive: true })
     fs.writeFileSync(resolvedStateFile, `${JSON.stringify(payload, null, 2)}\n`)
   }

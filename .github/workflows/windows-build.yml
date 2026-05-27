@@ -1,0 +1,47 @@
+name: Windows Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/windows-build.yml'
+      - 'electron/**'
+      - 'models/paddleocr/README.md'
+      - 'package-lock.json'
+      - 'package.json'
+      - 'runtime/**'
+      - 'scripts/**'
+      - 'src/**'
+      - 'index.html'
+      - 'vite.config.js'
+
+jobs:
+  package-windows:
+    name: Package Windows x64
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.19'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build portable Windows package
+        run: npm run pack:win
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: open-hex-assistant-win-x64
+          path: release/*win-x64.zip
+          if-no-files-found: error
+          retention-days: 14

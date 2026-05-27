@@ -40,7 +40,7 @@ function appUrl() {
     return addAppParams(process.env.VITE_DEV_SERVER_URL)
   }
 
-  const indexUrl = pathToFileURL(path.join(__dirname, '..', 'dist', 'index.html')).toString()
+  const indexUrl = pathToFileURL(path.join(appRoot(), 'dist', 'index.html')).toString()
   return addAppParams(indexUrl)
 }
 
@@ -87,9 +87,9 @@ function startOcrWorker() {
   if (process.env.OCR_ENABLED !== '1') return
 
   const workerRuntime = ocrWorkerRuntime()
-  const workerPath = path.join(__dirname, 'ocr-worker.cjs')
+  const workerPath = path.join(appRoot(), 'electron', 'ocr-worker.cjs')
   ocrWorker = spawn(workerRuntime.command, [workerPath], {
-    cwd: path.join(__dirname, '..'),
+    cwd: workerCwd(),
     env: workerRuntime.env,
     stdio: ['ignore', 'pipe', 'pipe'],
   })
@@ -142,8 +142,27 @@ function ocrWorkerRuntime() {
     env: {
       ...process.env,
       ELECTRON_RUN_AS_NODE: '1',
+      OPEN_HEX_APP_ROOT: appRoot(),
+      OPEN_HEX_RESOURCE_ROOT: resourceRoot(),
+      OPEN_HEX_USER_DATA: userDataRoot(),
     },
   }
+}
+
+function appRoot() {
+  return app.isPackaged ? app.getAppPath() : path.join(__dirname, '..')
+}
+
+function resourceRoot() {
+  return app.isPackaged ? process.resourcesPath : path.join(__dirname, '..')
+}
+
+function userDataRoot() {
+  return app.isPackaged ? app.getPath('userData') : path.join(__dirname, '..')
+}
+
+function workerCwd() {
+  return app.isPackaged ? resourceRoot() : path.join(__dirname, '..')
 }
 
 function registerCalibrationIpc() {
@@ -221,6 +240,10 @@ function toggleClickThrough() {
 }
 
 app.whenReady().then(() => {
+  process.env.OPEN_HEX_APP_ROOT = appRoot()
+  process.env.OPEN_HEX_RESOURCE_ROOT = resourceRoot()
+  process.env.OPEN_HEX_USER_DATA = userDataRoot()
+
   registerCalibrationIpc()
   createOverlayWindow()
   startStateFileWatcher()
