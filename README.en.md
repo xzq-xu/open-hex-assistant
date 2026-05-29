@@ -102,6 +102,8 @@ LCU/Live Client Data champion detection -> lightweight augment-pick screen detec
 
 It intentionally skips full-screen text detection. The continuous worker does not OCR indiscriminately by default: it first connects to LCU, reads gameflow and the current champion, and falls back to the in-game Live Client Data API when LCU is temporarily unavailable. Lightweight screenshot trigger detection starts only after the game is actually running. PaddleOCR starts only after the three-choice augment screen is detected. The three card locations are stable during augment selection, so calibrated title crops are the key to staying near the 500 ms target.
 
+It also gates by game mode by default: the overlay and OCR only activate when LCU queue text matches `mayhem / 海克斯 / 狂欢`, or when the queue id explicitly matches `LCU_ALLOWED_QUEUE_IDS`. Summoner's Rift, regular ARAM, and other non-ARAM-Mayhem modes hide the overlay so it does not cover the top-left game UI.
+
 Prepare model files:
 
 ```bash
@@ -185,6 +187,9 @@ npx cross-env LCU_ENABLED=0 npm run overlay:ocr:dev
 npx cross-env LCU_REQUIRE_GAMEFLOW=0 npm run overlay:ocr:dev
 npx cross-env LCU_LOCKFILE="C:/Riot Games/League of Legends/lockfile" npm run overlay:ocr:dev
 npx cross-env LCU_ALLOWED_PHASES=InProgress,Reconnect npm run overlay:ocr:dev
+npx cross-env LCU_ALLOWED_QUEUE_IDS=1234 npm run overlay:ocr:dev
+npx cross-env LCU_ALLOWED_MODE_KEYWORDS=mayhem,海克斯,狂欢 npm run overlay:ocr:dev
+npx cross-env LCU_REQUIRE_SUPPORTED_MODE=0 npm run overlay:ocr:dev
 npx cross-env OCR_AUTO_GATE=0 npm run overlay:ocr:dev
 npx cross-env OCR_REQUIRE_LEAGUE_PROCESS=0 npm run overlay:ocr:dev
 npx cross-env OCR_FORCE_ACTIVE=1 npm run overlay:ocr:dev
@@ -197,7 +202,7 @@ npx cross-env OCR_DEBUG=1 npm run ocr:probe
 npx cross-env PADDLEOCR_REC_MODEL=C:/path/rec.onnx PADDLEOCR_DICT=C:/path/ppocr_keys_v1.txt npm run ocr:probe
 ```
 
-`LCU_ENABLED=0` disables LCU gating and falls back to process/screen gating; `LCU_REQUIRE_GAMEFLOW=0` allows the old gates to continue when LCU is disconnected; `OCR_AUTO_GATE=0` returns to the old continuous-OCR behavior; `OCR_FORCE_ACTIVE=1` is for debugging and forces the worker into the recognition phase. `COACH_ENABLED=0` disables only the local strategy Coach, not augment OCR. `OCR_CROP_SCALE` defaults to `2` and upsamples title crops before recognition; use `1` on slower machines.
+`LCU_ENABLED=0` disables LCU gating and falls back to process/screen gating; `LCU_REQUIRE_GAMEFLOW=0` allows the old gates to continue when LCU is disconnected; `LCU_REQUIRE_SUPPORTED_MODE=0` disables the ARAM-Mayhem mode gate and is recommended only for debugging; `OCR_AUTO_GATE=0` returns to the old continuous-OCR behavior; `OCR_FORCE_ACTIVE=1` is for debugging and forces the worker into the recognition phase. `COACH_ENABLED=0` disables only the local strategy Coach, not augment OCR. `OCR_CROP_SCALE` defaults to `2` and upsamples title crops before recognition; use `1` on slower machines.
 
 On Windows, the default OCR execution providers are:
 

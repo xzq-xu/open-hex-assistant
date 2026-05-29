@@ -70,7 +70,8 @@ The implemented worker uses this gated faster path:
 ```mermaid
 flowchart LR
   LCU["LCU HTTP + WebSocket + Live API"] --> Game["Gameflow + champion gate"]
-  Game --> Capture["screenshot-desktop"]
+  Game --> Mode["ARAM Mayhem mode gate"]
+  Mode --> Capture["screenshot-desktop"]
   Capture --> Trigger["Augment-pick screen trigger"]
   Trigger --> Crop["Sharp ROI crops"]
   Crop --> Rec["PaddleOCR rec ONNX"]
@@ -79,7 +80,9 @@ flowchart LR
   Electron --> Overlay["React overlay"]
 ```
 
-It uses fixed title ROIs instead of a detector model. That is the correct default for a 500 ms requirement because the three card locations are predictable during augment selection. The worker does not run PaddleOCR continuously by default: it connects to LCU over HTTP/WebSocket, waits for an in-game gameflow phase, resolves the local champion, then runs a cheap image-statistics trigger over the calibrated title strips, and only runs OCR while the augment picker is active. If LCU is briefly unavailable while the game is already running, the worker can use the Live Client Data API on port `2999` as a game/champion fallback.
+It uses fixed title ROIs instead of a detector model. That is the correct default for a 500 ms requirement because the three card locations are predictable during augment selection. The worker does not run PaddleOCR continuously by default: it connects to LCU over HTTP/WebSocket, waits for an in-game gameflow phase, confirms the queue looks like ARAM Mayhem, resolves the local champion, then runs a cheap image-statistics trigger over the calibrated title strips, and only runs OCR while the augment picker is active. If LCU is briefly unavailable while the game is already running, the worker can use the Live Client Data API on port `2999` as a game/champion fallback.
+
+The ARAM Mayhem mode gate is enabled by default. It accepts queues whose LCU queue text matches `mayhem`, `海克斯`, or `狂欢`, or whose queue id is explicitly configured through `LCU_ALLOWED_QUEUE_IDS`. Non-matching modes emit `unsupported-mode`; the renderer returns `null` for that state so the overlay does not cover regular games.
 
 ## Local Strategy Coach
 
@@ -132,6 +135,9 @@ Runtime controls:
 - `LCU_LOCKFILE`: explicit path to the League Client lockfile
 - `LCU_INSTALL_DIR`: explicit League install directory containing `lockfile`
 - `LCU_ALLOWED_PHASES`: comma-separated in-game phases, defaults to `InProgress,Reconnect`
+- `LCU_REQUIRE_SUPPORTED_MODE=0`: disable the ARAM Mayhem mode gate for debugging
+- `LCU_ALLOWED_QUEUE_IDS`: comma-separated queue ids that should be treated as ARAM Mayhem
+- `LCU_ALLOWED_MODE_KEYWORDS`: comma-separated queue text keywords, defaults to `mayhem,海克斯,狂欢`
 - `OVERLAY_CHAMPION`: champion id, for example `777`
 - `OVERLAY_CANDIDATES`: three candidate augment names or ids separated by `|`, comma, semicolon, or newline
 - `OVERLAY_STATE_FILE`: JSON file watched every 500 ms for live OCR results

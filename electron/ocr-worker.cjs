@@ -158,6 +158,11 @@ async function runCommandFrame(config, recognizer, loopState, lcuGameState, comm
   }
 
   const lcu = await lcuGameState.snapshot()
+  if (isUnsupportedMode(config, lcu)) {
+    emitUnsupportedMode(config, lcu, command)
+    return config.lcu.pollMs
+  }
+
   const coach = command.type === 'coach-now'
     ? await refreshCoach(config, loopState, lcuGameState, 'manual-hotkey')
     : await maybeRefreshCoach(config, loopState, lcuGameState)
@@ -224,6 +229,15 @@ async function runGatedFrame(config, recognizer, loopState, lcuGameState) {
   const scanStartedAt = performance.now()
   const lcu = await lcuGameState.snapshot()
   const coach = await maybeRefreshCoach(config, loopState, lcuGameState)
+  if (isUnsupportedMode(config, lcu)) {
+    emitPassiveState(config, loopState, 'unsupported-mode', {
+      lcu,
+      coach: null,
+      scanElapsedMs: Math.round(performance.now() - scanStartedAt),
+    })
+    return config.lcu.pollMs
+  }
+
   if (lcu.enabled && !lcu.allowed) {
     emitPassiveState(config, loopState, lcu.connected ? 'lcu-waiting' : 'lcu-disconnected', {
       lcu,
@@ -400,6 +414,31 @@ function emitPassiveState(config, loopState, phase, details = {}) {
       screen: details.screen,
     },
   })
+}
+
+function emitUnsupportedMode(config, lcu, command) {
+  emitState(config, {
+    candidates: [],
+    coach: null,
+    ocr: {
+      ready: true,
+      engine: 'paddleocr-onnx',
+      phase: 'unsupported-mode',
+      active: false,
+      targetMs: 500,
+      lcu,
+      command,
+    },
+  })
+}
+
+function isUnsupportedMode(config, lcu) {
+  return Boolean(
+    config.lcu?.enabled
+    && config.lcu?.requireSupportedMode !== false
+    && lcu?.connected
+    && lcu.reason === 'unsupported-mode'
+  )
 }
 
 async function maybeRefreshCoach(config, loopState, lcuGameState) {

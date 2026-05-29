@@ -458,8 +458,11 @@ function AugmentCard({ augment, selected, onClick, staticData, compact = false }
 }
 
 function OverlayShell({ selectedChampion, selectedChampionId, recommendation, recognizedCandidates, loading, error, staticData, runtimeState, coachInsights }) {
-  const candidateAugments = recommendation?.candidateAugments?.slice(0, 3) ?? []
   const ocr = runtimeState?.ocr
+  const unsupportedMode = ocr?.phase === 'unsupported-mode'
+  const candidateAugments = recognizedCandidates.length
+    ? recommendation?.candidateAugments?.slice(0, 3) ?? []
+    : []
   const ocrStatus = ocr?.elapsedMs ? `OCR ${ocr.elapsedMs}ms${ocr.withinTarget === false ? ' 超时' : ''}` : ''
   const ocrPhaseStatus = ocrPhaseLabel(ocr)
   const emptyMessage = loading ? '正在加载英雄与海克斯数据' : ocrPhaseStatus || '没有匹配到候选海克斯'
@@ -468,6 +471,8 @@ function OverlayShell({ selectedChampion, selectedChampionId, recommendation, re
       ? '同步公开统计中'
       : [ocrStatus || ocrPhaseStatus, recognizedCandidates.length ? `已识别 ${recognizedCandidates.length}/3` : '等待候选识别'].filter(Boolean).join(' · ')
   )
+
+  if (unsupportedMode) return null
 
   return (
     <main className="overlay-root">
@@ -508,6 +513,7 @@ function ocrPhaseLabel(ocr) {
   if (!ocr?.phase) return ''
   if (ocr.phase === 'lcu-disconnected') return '等待 League Client'
   if (ocr.phase === 'lcu-waiting') return `等待游戏中${ocr.lcu?.phase ? ` (${ocr.lcu.phase})` : ''}`
+  if (ocr.phase === 'unsupported-mode') return '非海克斯大乱斗，已隐藏'
   if (ocr.phase === 'hotkey-unavailable') return 'OCR 未启动'
   if (ocr.phase === 'idle') return '等待 LoL 游戏启动'
   if (ocr.phase === 'game-running') return '等待海克斯选择'
@@ -552,7 +558,7 @@ function getInitialChampionId() {
 function getInitialRecognitionInput() {
   const params = getSearchParams()
   const value = params.get('candidates') || params.get('augments')
-  if (!value) return DEFAULT_RECOGNITION_INPUT
+  if (!value) return isOverlayMode() ? '' : DEFAULT_RECOGNITION_INPUT
   return value.replace(/[|｜,，;；/]/g, '\n')
 }
 

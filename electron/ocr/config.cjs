@@ -62,10 +62,17 @@ function defaultOcrConfig(env = process.env) {
     lcu: {
       enabled: parseBool(env.LCU_ENABLED, true),
       requireGameflow: parseBool(env.LCU_REQUIRE_GAMEFLOW, true),
+      requireSupportedMode: parseBool(env.LCU_REQUIRE_SUPPORTED_MODE, true),
       lockfilePath: env.LCU_LOCKFILE || '',
       installDir: env.LCU_INSTALL_DIR || '',
       pollMs: Number(env.LCU_POLL_MS || 1000),
       allowedPhases: parseList(env.LCU_ALLOWED_PHASES) || ['InProgress', 'Reconnect'],
+      allowedQueueIds: parseNumberList(env.LCU_ALLOWED_QUEUE_IDS) || [],
+      allowedModeKeywords: parseList(env.LCU_ALLOWED_MODE_KEYWORDS) || [
+        'mayhem',
+        '海克斯',
+        '狂欢',
+      ],
     },
     coach: {
       enabled: parseBool(env.COACH_ENABLED, true),
@@ -209,12 +216,19 @@ function normalizeLcu(lcu = {}) {
     ...lcu,
     enabled: lcu.enabled !== false,
     requireGameflow: lcu.requireGameflow !== false,
+    requireSupportedMode: lcu.requireSupportedMode !== false,
     lockfilePath: String(lcu.lockfilePath || ''),
     installDir: String(lcu.installDir || ''),
     pollMs: Math.max(250, Math.round(numberOr(lcu.pollMs, 1000))),
     allowedPhases: Array.isArray(lcu.allowedPhases) && lcu.allowedPhases.length
       ? lcu.allowedPhases.map((phase) => String(phase).trim()).filter(Boolean)
       : ['InProgress', 'Reconnect'],
+    allowedQueueIds: Array.isArray(lcu.allowedQueueIds)
+      ? lcu.allowedQueueIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)
+      : [],
+    allowedModeKeywords: Array.isArray(lcu.allowedModeKeywords) && lcu.allowedModeKeywords.length
+      ? lcu.allowedModeKeywords.map((keyword) => String(keyword).trim().toLowerCase()).filter(Boolean)
+      : ['mayhem', '海克斯', '狂欢'],
   }
 }
 
@@ -312,6 +326,13 @@ function parseList(value) {
     .map((item) => item.trim())
     .filter(Boolean)
   return items.length ? items : null
+}
+
+function parseNumberList(value) {
+  const items = parseList(value)
+  if (!items) return null
+  const numbers = items.map((item) => Number(item)).filter((number) => Number.isFinite(number) && number > 0)
+  return numbers.length ? numbers : null
 }
 
 function parseExecutionProviders(value) {

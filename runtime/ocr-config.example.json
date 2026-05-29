@@ -60,10 +60,13 @@
   "lcu": {
     "enabled": true,
     "requireGameflow": true,
+    "requireSupportedMode": true,
     "lockfilePath": "",
     "installDir": "",
     "pollMs": 1000,
-    "allowedPhases": ["InProgress", "Reconnect"]
+    "allowedPhases": ["InProgress", "Reconnect"],
+    "allowedQueueIds": [],
+    "allowedModeKeywords": ["mayhem", "海克斯", "狂欢"]
   },
   "coach": {
     "enabled": true,

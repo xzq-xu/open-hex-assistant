@@ -15,6 +15,11 @@ class LcuGameState {
       allowedPhases: Array.isArray(options.allowedPhases) && options.allowedPhases.length
         ? options.allowedPhases
         : DEFAULT_ALLOWED_PHASES,
+      requireSupportedMode: options.requireSupportedMode !== false,
+      allowedQueueIds: Array.isArray(options.allowedQueueIds) ? options.allowedQueueIds : [],
+      allowedModeKeywords: Array.isArray(options.allowedModeKeywords) && options.allowedModeKeywords.length
+        ? options.allowedModeKeywords
+        : ['mayhem', '海克斯', '狂欢'],
     }
     this.client = new LcuClient(this.options)
     this.phase = ''
@@ -61,7 +66,10 @@ class LcuGameState {
       const phase = this.session?.phase || this.phase || ''
       const liveChampionId = resolveLiveChampionId(this.liveActivePlayer, this.championAliasToId)
       const liveGameRunning = Boolean(this.liveActivePlayer)
-      const allowed = this.options.allowedPhases.includes(phase) || liveGameRunning
+      const phaseAllowed = this.options.allowedPhases.includes(phase) || liveGameRunning
+      const mode = resolveSupportedMode(this.session, this.options)
+      const modeAllowed = mode.supported || !this.options.requireSupportedMode
+      const allowed = phaseAllowed && modeAllowed
       const championId = resolveChampionId(
         this.session,
         this.summoner,
@@ -74,6 +82,9 @@ class LcuGameState {
         enabled: true,
         connected: true,
         allowed,
+        phaseAllowed,
+        modeSupported: mode.supported,
+        mode,
         phase: liveGameRunning && !this.options.allowedPhases.includes(phase) ? 'InProgress' : phase,
         championId,
         championSource: championId && championId === liveChampionId ? 'live-client-data' : championSource({
@@ -87,7 +98,7 @@ class LcuGameState {
         gameMode: this.session?.gameData?.queue?.gameMode || this.session?.map?.gameMode || '',
         gameClient: this.session?.gameClient || null,
         lockfilePath: this.client.credentials?.lockfilePath || '',
-        reason: liveGameRunning ? 'live-client-data' : allowed ? 'gameflow-allowed' : 'phase-not-allowed',
+        reason: !modeAllowed ? 'unsupported-mode' : liveGameRunning ? 'live-client-data' : allowed ? 'gameflow-allowed' : 'phase-not-allowed',
       }
     } catch (error) {
       const liveSnapshot = await this.liveFallbackSnapshot().catch(() => null)
@@ -191,6 +202,26 @@ class LcuGameState {
       await this.refresh()
       const liveAllGameData = await this.readLiveAllGameData()
       const phase = this.session?.phase || this.phase || ''
+      const mode = resolveSupportedMode(this.session, this.options)
+      if (!mode.supported && this.options.requireSupportedMode) {
+        return {
+          enabled: true,
+          connected: true,
+          source: '',
+          trigger: options.trigger || 'auto',
+          phase,
+          queueId: mode.queueId,
+          gameMode: mode.gameMode,
+          myChampionId: 0,
+          myPlayer: null,
+          myTeam: [],
+          enemyTeam: [],
+          mode,
+          reason: 'unsupported-mode',
+          observedAt: new Date().toISOString(),
+        }
+      }
+
       const fromLive = buildLiveRoster({
         allGameData: liveAllGameData,
         activePlayer: this.liveActivePlayer,
@@ -218,13 +249,14 @@ class LcuGameState {
         source: fromLive.source || roster.source || 'lcu-gameflow',
         trigger: options.trigger || 'auto',
         phase: liveAllGameData?.gameData ? 'InProgress' : phase,
-        queueId: this.session?.gameData?.queue?.id || 0,
-        gameMode: this.session?.gameData?.queue?.gameMode || this.session?.map?.gameMode || '',
+        queueId: mode.queueId,
+        gameMode: mode.gameMode,
         gameTime: Number(liveAllGameData?.gameData?.gameTime || 0),
         myChampionId: myChampionId || roster.myPlayer?.championId || 0,
         myPlayer: roster.myPlayer || null,
         myTeam: roster.myTeam,
         enemyTeam: roster.enemyTeam,
+        mode,
         reason: roster.reason || (fromLive.source ? 'live-client-data' : 'lcu-gameflow'),
         observedAt: new Date().toISOString(),
       }
@@ -250,10 +282,15 @@ class LcuGameState {
     if (!liveActivePlayer) return null
 
     const championId = resolveLiveChampionId(liveActivePlayer, this.championAliasToId)
+    const mode = resolveSupportedMode(null, this.options)
+    const modeAllowed = mode.supported || !this.options.requireSupportedMode
     return {
       enabled: true,
       connected: true,
-      allowed: true,
+      allowed: modeAllowed,
+      phaseAllowed: true,
+      modeSupported: mode.supported,
+      mode,
       phase: 'InProgress',
       championId,
       championSource: championId ? 'live-client-data' : '',
@@ -261,7 +298,7 @@ class LcuGameState {
       gameMode: '',
       gameClient: null,
       lockfilePath: '',
-      reason: 'live-client-data',
+      reason: modeAllowed ? 'live-client-data' : 'unsupported-mode',
     }
   }
 
@@ -325,6 +362,59 @@ function normalizeChampionAlias(value) {
     .replace(/^game_character_displayname_/i, '')
     .replace(/[^\p{L}\p{N}]/gu, '')
     .toLowerCase()
+}
+
+function resolveSupportedMode(session, options = {}) {
+  const queue = session?.gameData?.queue || {}
+  const queueId = Number(queue.id || 0)
+  const gameMode = String(queue.gameMode || session?.map?.gameMode || '')
+  const text = [
+    queue.name,
+    queue.shortName,
+    queue.description,
+    queue.detailedDescription,
+    queue.gameMode,
+    queue.gameTypeConfigId,
+    session?.map?.gameMode,
+    session?.map?.name,
+  ].filter(Boolean).join(' ').toLowerCase()
+  const allowedQueueIds = (options.allowedQueueIds || [])
+    .map((id) => Number(id))
+    .filter((id) => Number.isFinite(id) && id > 0)
+  const allowedModeKeywords = (options.allowedModeKeywords || [])
+    .map((keyword) => String(keyword).trim().toLowerCase())
+    .filter(Boolean)
+
+  if (queueId && allowedQueueIds.includes(queueId)) {
+    return {
+      supported: true,
+      matchedBy: 'queue-id',
+      queueId,
+      gameMode,
+      queueName: String(queue.name || ''),
+    }
+  }
+
+  const matchedKeyword = allowedModeKeywords.find((keyword) => text.includes(keyword))
+  if (matchedKeyword) {
+    return {
+      supported: true,
+      matchedBy: 'keyword',
+      matchedKeyword,
+      queueId,
+      gameMode,
+      queueName: String(queue.name || ''),
+    }
+  }
+
+  return {
+    supported: false,
+    matchedBy: '',
+    queueId,
+    gameMode,
+    queueName: String(queue.name || ''),
+    checkedText: text.slice(0, 240),
+  }
 }
 
 function buildSessionRoster({ session, summoner, championsById }) {
@@ -455,6 +545,7 @@ function normalizePlayerName(value) {
 module.exports = {
   DEFAULT_ALLOWED_PHASES,
   LcuGameState,
+  resolveSupportedMode,
   resolveChampSelectChampionId,
   resolveChampionId,
   resolveLiveChampionId,

@@ -102,6 +102,8 @@ LCU/Live Client Data 英雄识别 -> 海克斯选择界面轻量检测 -> 裁剪
 
 这里刻意跳过全屏文字检测。持续 worker 默认不会无差别 OCR：它会先连接 LCU，读取 gameflow 和当前英雄；如果 LCU 短暂不可用，会尝试游戏内 Live Client Data API 兜底。只有进入游戏中后，才开始做轻量截图特征检测；确认进入海克斯三选一界面后才运行 PaddleOCR。海克斯选择界面的三张卡片位置稳定，校准标题区域后直接裁剪识别，是 500ms 目标内完成识别的关键。
 
+默认还会做模式 gate：只有 LCU 队列信息匹配 `mayhem / 海克斯 / 狂欢`，或显式命中 `LCU_ALLOWED_QUEUE_IDS` 时，overlay 才会显示并启动 OCR。普通召唤师峡谷、普通极地大乱斗等非海克斯大乱斗模式会直接隐藏 overlay，避免遮挡游戏左上角。
+
 准备模型文件：
 
 ```bash
@@ -185,6 +187,9 @@ npx cross-env LCU_ENABLED=0 npm run overlay:ocr:dev
 npx cross-env LCU_REQUIRE_GAMEFLOW=0 npm run overlay:ocr:dev
 npx cross-env LCU_LOCKFILE="C:/Riot Games/League of Legends/lockfile" npm run overlay:ocr:dev
 npx cross-env LCU_ALLOWED_PHASES=InProgress,Reconnect npm run overlay:ocr:dev
+npx cross-env LCU_ALLOWED_QUEUE_IDS=1234 npm run overlay:ocr:dev
+npx cross-env LCU_ALLOWED_MODE_KEYWORDS=mayhem,海克斯,狂欢 npm run overlay:ocr:dev
+npx cross-env LCU_REQUIRE_SUPPORTED_MODE=0 npm run overlay:ocr:dev
 npx cross-env OCR_AUTO_GATE=0 npm run overlay:ocr:dev
 npx cross-env OCR_REQUIRE_LEAGUE_PROCESS=0 npm run overlay:ocr:dev
 npx cross-env OCR_FORCE_ACTIVE=1 npm run overlay:ocr:dev
@@ -197,7 +202,7 @@ npx cross-env OCR_DEBUG=1 npm run ocr:probe
 npx cross-env PADDLEOCR_REC_MODEL=C:/path/rec.onnx PADDLEOCR_DICT=C:/path/ppocr_keys_v1.txt npm run ocr:probe
 ```
 
-`LCU_ENABLED=0` 会关闭 LCU 门控并回退到进程/画面检测；`LCU_REQUIRE_GAMEFLOW=0` 会让 LCU 断开时仍允许旧门控继续工作；`OCR_AUTO_GATE=0` 会回到旧的持续 OCR 行为；`OCR_FORCE_ACTIVE=1` 用于调试，直接强制进入识别态。`COACH_ENABLED=0` 只关闭本地战术 Coach，不影响海克斯 OCR。`OCR_CROP_SCALE` 默认是 `2`，会在识别前放大标题裁剪图；性能较弱的机器可以调成 `1`。
+`LCU_ENABLED=0` 会关闭 LCU 门控并回退到进程/画面检测；`LCU_REQUIRE_GAMEFLOW=0` 会让 LCU 断开时仍允许旧门控继续工作；`LCU_REQUIRE_SUPPORTED_MODE=0` 会关闭海克斯大乱斗模式 gate，仅建议调试使用；`OCR_AUTO_GATE=0` 会回到旧的持续 OCR 行为；`OCR_FORCE_ACTIVE=1` 用于调试，直接强制进入识别态。`COACH_ENABLED=0` 只关闭本地战术 Coach，不影响海克斯 OCR。`OCR_CROP_SCALE` 默认是 `2`，会在识别前放大标题裁剪图；性能较弱的机器可以调成 `1`。
 
 Windows 默认 OCR execution providers：
 
