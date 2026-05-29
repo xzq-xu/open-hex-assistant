@@ -52,6 +52,8 @@ function runLoop(config, recognizer, lcuGameState) {
     lastActiveAt: 0,
     lastPassiveEmitAt: 0,
     lastPassiveKey: '',
+    lastCoachAt: 0,
+    coach: null,
   }
 
   let tick
@@ -126,7 +128,7 @@ function parseCommand(line) {
   try {
     const payload = JSON.parse(line)
     const type = String(payload?.type || '')
-    if (['recognize-now', 'refresh-hero', 'reset'].includes(type)) {
+    if (['recognize-now', 'refresh-hero', 'coach-now', 'reset'].includes(type)) {
       return {
         type,
         requestedAt: payload.requestedAt || new Date().toISOString(),
@@ -156,15 +158,37 @@ async function runCommandFrame(config, recognizer, loopState, lcuGameState, comm
   }
 
   const lcu = await lcuGameState.snapshot()
+  const coach = command.type === 'coach-now'
+    ? await refreshCoach(config, loopState, lcuGameState, 'manual-hotkey')
+    : await maybeRefreshCoach(config, loopState, lcuGameState)
 
   if (command.type === 'refresh-hero') {
     emitState(config, {
       championId: lcu.championId || config.championId,
       candidates: [],
+      coach,
       ocr: {
         ready: true,
         engine: 'paddleocr-onnx',
         phase: 'hero-refreshed',
+        active: false,
+        targetMs: 500,
+        lcu,
+        command,
+      },
+    })
+    return config.capture.pollMs
+  }
+
+  if (command.type === 'coach-now') {
+    emitState(config, {
+      championId: coach?.myChampionId || lcu.championId || config.championId,
+      candidates: [],
+      coach,
+      ocr: {
+        ready: true,
+        engine: 'paddleocr-onnx',
+        phase: 'coach-refreshed',
         active: false,
         targetMs: 500,
         lcu,
@@ -179,6 +203,7 @@ async function runCommandFrame(config, recognizer, loopState, lcuGameState, comm
   await recognizeFrame(config, recognizer, screenBuffer, {
     championId: lcu.championId,
     lcu,
+    coach,
     startedAt,
     trigger: {
       active: true,
@@ -198,9 +223,11 @@ async function runGatedFrame(config, recognizer, loopState, lcuGameState) {
 
   const scanStartedAt = performance.now()
   const lcu = await lcuGameState.snapshot()
+  const coach = await maybeRefreshCoach(config, loopState, lcuGameState)
   if (lcu.enabled && !lcu.allowed) {
     emitPassiveState(config, loopState, lcu.connected ? 'lcu-waiting' : 'lcu-disconnected', {
       lcu,
+      coach,
       scanElapsedMs: Math.round(performance.now() - scanStartedAt),
     })
     return lcu.connected ? config.lcu.pollMs : automation.idlePollMs
@@ -220,6 +247,7 @@ async function runGatedFrame(config, recognizer, loopState, lcuGameState) {
     emitPassiveState(config, loopState, 'idle', {
       game,
       lcu,
+      coach,
       scanElapsedMs: Math.round(performance.now() - scanStartedAt),
     })
     return automation.idlePollMs
@@ -240,6 +268,7 @@ async function runGatedFrame(config, recognizer, loopState, lcuGameState) {
     emitPassiveState(config, loopState, 'game-running', {
       game,
       lcu,
+      coach,
       trigger,
       screen: trigger.screen,
       scanElapsedMs: Math.round(performance.now() - scanStartedAt),
@@ -251,6 +280,7 @@ async function runGatedFrame(config, recognizer, loopState, lcuGameState) {
     championId: lcu.championId,
     game,
     lcu,
+    coach,
     trigger: {
       ...trigger,
       active,
@@ -317,6 +347,7 @@ async function recognizeFrame(config, recognizer, screenBuffer, context = {}) {
   emitState(config, {
     championId: context.championId || config.championId,
     candidates,
+    coach: context.coach,
     ocr: {
       ready: true,
       engine: 'paddleocr-onnx',
@@ -355,6 +386,7 @@ function emitPassiveState(config, loopState, phase, details = {}) {
   emitState(config, {
     championId: details.lcu?.championId || config.championId,
     candidates: [],
+    coach: details.coach,
     ocr: {
       ready: true,
       engine: 'paddleocr-onnx',
@@ -368,6 +400,23 @@ function emitPassiveState(config, loopState, phase, details = {}) {
       screen: details.screen,
     },
   })
+}
+
+async function maybeRefreshCoach(config, loopState, lcuGameState) {
+  if (!config.coach?.enabled) return loopState.coach
+  const now = Date.now()
+  if (loopState.coach && now - loopState.lastCoachAt < config.coach.passivePollMs) {
+    return loopState.coach
+  }
+  return refreshCoach(config, loopState, lcuGameState, 'auto')
+}
+
+async function refreshCoach(config, loopState, lcuGameState, trigger) {
+  if (!config.coach?.enabled) return null
+  const coach = await lcuGameState.coachSnapshot({ trigger })
+  loopState.coach = coach
+  loopState.lastCoachAt = Date.now()
+  return coach
 }
 
 function emitState(config, state) {

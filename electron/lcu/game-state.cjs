@@ -27,6 +27,7 @@ class LcuGameState {
     this.initialized = false
     this.unsubscribers = []
     this.championAliasToId = new Map()
+    this.championsById = new Map()
     this.championSummaryLoaded = false
   }
 
@@ -142,6 +143,14 @@ class LcuGameState {
         champion?.name,
       ].map(normalizeChampionAlias).filter(Boolean)
 
+      if (id > 0) {
+        this.championsById.set(id, {
+          id,
+          alias: String(champion?.alias || ''),
+          name: String(champion?.name || champion?.alias || `Champion ${id}`),
+        })
+      }
+
       for (const alias of aliases) {
         if (id > 0) this.championAliasToId.set(alias, id)
       }
@@ -154,6 +163,86 @@ class LcuGameState {
     const phase = this.session?.phase || this.phase || ''
     if (!['InProgress', 'GameStart', 'Reconnect'].includes(phase)) return null
     return this.client.getLiveActivePlayer().catch(() => null)
+  }
+
+  async readLiveAllGameData() {
+    const phase = this.session?.phase || this.phase || ''
+    if (!['InProgress', 'GameStart', 'Reconnect'].includes(phase)) return null
+    return this.client.getLiveAllGameData().catch(() => null)
+  }
+
+  async coachSnapshot(options = {}) {
+    if (!this.options.enabled) {
+      return {
+        enabled: false,
+        source: '',
+        trigger: options.trigger || 'auto',
+        phase: '',
+        myChampionId: 0,
+        myTeam: [],
+        enemyTeam: [],
+        reason: 'lcu-disabled',
+      }
+    }
+
+    this.init()
+
+    try {
+      await this.refresh()
+      const liveAllGameData = await this.readLiveAllGameData()
+      const phase = this.session?.phase || this.phase || ''
+      const fromLive = buildLiveRoster({
+        allGameData: liveAllGameData,
+        activePlayer: this.liveActivePlayer,
+        championAliasToId: this.championAliasToId,
+        championsById: this.championsById,
+      })
+      const roster = fromLive.myTeam.length || fromLive.enemyTeam.length
+        ? fromLive
+        : buildSessionRoster({
+          session: this.session,
+          summoner: this.summoner,
+          championsById: this.championsById,
+        })
+      const myChampionId = resolveChampionId(
+        this.session,
+        this.summoner,
+        this.champSelectSession,
+        this.liveActivePlayer,
+        this.championAliasToId,
+      )
+
+      return {
+        enabled: true,
+        connected: true,
+        source: fromLive.source || roster.source || 'lcu-gameflow',
+        trigger: options.trigger || 'auto',
+        phase: liveAllGameData?.gameData ? 'InProgress' : phase,
+        queueId: this.session?.gameData?.queue?.id || 0,
+        gameMode: this.session?.gameData?.queue?.gameMode || this.session?.map?.gameMode || '',
+        gameTime: Number(liveAllGameData?.gameData?.gameTime || 0),
+        myChampionId: myChampionId || roster.myPlayer?.championId || 0,
+        myPlayer: roster.myPlayer || null,
+        myTeam: roster.myTeam,
+        enemyTeam: roster.enemyTeam,
+        reason: roster.reason || (fromLive.source ? 'live-client-data' : 'lcu-gameflow'),
+        observedAt: new Date().toISOString(),
+      }
+    } catch (error) {
+      return {
+        enabled: true,
+        connected: false,
+        source: '',
+        trigger: options.trigger || 'auto',
+        phase: '',
+        myChampionId: 0,
+        myTeam: [],
+        enemyTeam: [],
+        reason: 'coach-unavailable',
+        error: error.message || String(error),
+        observedAt: new Date().toISOString(),
+      }
+    }
   }
 
   async liveFallbackSnapshot() {
@@ -234,8 +323,133 @@ function championSource(context) {
 function normalizeChampionAlias(value) {
   return String(value || '')
     .replace(/^game_character_displayname_/i, '')
-    .replace(/[^a-z0-9]/gi, '')
+    .replace(/[^\p{L}\p{N}]/gu, '')
     .toLowerCase()
+}
+
+function buildSessionRoster({ session, summoner, championsById }) {
+  const teamOne = Array.isArray(session?.gameData?.teamOne) ? session.gameData.teamOne : []
+  const teamTwo = Array.isArray(session?.gameData?.teamTwo) ? session.gameData.teamTwo : []
+  const puuid = summoner?.puuid || ''
+  const teamOneHasSelf = puuid && teamOne.some((player) => samePuuid(player, puuid))
+  const teamTwoHasSelf = puuid && teamTwo.some((player) => samePuuid(player, puuid))
+  const mySource = teamTwoHasSelf ? teamTwo : teamOne
+  const enemySource = teamTwoHasSelf ? teamOne : teamTwo
+  const myTeam = mySource.map((player, index) => normalizeSessionPlayer(player, {
+    index,
+    isSelf: samePuuid(player, puuid),
+    team: teamTwoHasSelf ? 'CHAOS' : 'ORDER',
+    championsById,
+  })).filter((player) => player.championId > 0)
+  const enemyTeam = enemySource.map((player, index) => normalizeSessionPlayer(player, {
+    index,
+    isSelf: false,
+    team: teamTwoHasSelf ? 'ORDER' : 'CHAOS',
+    championsById,
+  })).filter((player) => player.championId > 0)
+
+  return {
+    source: 'lcu-gameflow',
+    reason: teamOneHasSelf || teamTwoHasSelf ? 'loading-roster' : 'loading-roster-self-unknown',
+    myPlayer: myTeam.find((player) => player.isSelf) || null,
+    myTeam,
+    enemyTeam,
+  }
+}
+
+function normalizeSessionPlayer(player, context) {
+  const championId = Number(player?.championId || 0)
+  const champion = context.championsById.get(championId)
+
+  return {
+    slot: context.index + 1,
+    team: context.team,
+    isSelf: Boolean(context.isSelf),
+    championId,
+    championName: champion?.name || `Champion ${championId}`,
+    championAlias: champion?.alias || '',
+    summonerName: displayName(player),
+    itemIds: [],
+    level: 0,
+    score: null,
+  }
+}
+
+function buildLiveRoster({ allGameData, activePlayer, championAliasToId, championsById }) {
+  const players = Array.isArray(allGameData?.allPlayers) ? allGameData.allPlayers : []
+  if (!players.length) {
+    return {
+      source: '',
+      reason: 'live-data-empty',
+      myPlayer: null,
+      myTeam: [],
+      enemyTeam: [],
+    }
+  }
+
+  const activeName = normalizePlayerName(activePlayer?.summonerName || allGameData?.activePlayer?.summonerName)
+  const self = players.find((player) => normalizePlayerName(player?.summonerName) === activeName)
+  const selfTeam = self?.team || players[0]?.team || 'ORDER'
+  const normalizedPlayers = players.map((player, index) => normalizeLivePlayer(player, {
+    index,
+    isSelf: player === self,
+    championAliasToId,
+    championsById,
+  }))
+
+  return {
+    source: 'live-client-data',
+    reason: 'live-client-data',
+    myPlayer: normalizedPlayers.find((player) => player.isSelf) || null,
+    myTeam: normalizedPlayers.filter((player) => player.team === selfTeam),
+    enemyTeam: normalizedPlayers.filter((player) => player.team !== selfTeam),
+  }
+}
+
+function normalizeLivePlayer(player, context) {
+  const championId = resolveChampionNameToId(player?.championName, context.championAliasToId)
+  const champion = context.championsById.get(championId)
+
+  return {
+    slot: context.index + 1,
+    team: String(player?.team || ''),
+    isSelf: Boolean(context.isSelf),
+    championId,
+    championName: champion?.name || player?.championName || `Champion ${championId}`,
+    championAlias: champion?.alias || '',
+    summonerName: String(player?.summonerName || ''),
+    itemIds: normalizeItemIds(player?.items),
+    level: Number(player?.level || 0),
+    score: player?.scores || null,
+  }
+}
+
+function resolveChampionNameToId(name, championAliasToId) {
+  return championAliasToId.get(normalizeChampionAlias(name)) || 0
+}
+
+function normalizeItemIds(items) {
+  if (!Array.isArray(items)) return []
+  return items
+    .map((item) => Number(item?.itemID || item?.itemId || item?.id || 0))
+    .filter((itemId) => Number.isFinite(itemId) && itemId > 0)
+}
+
+function samePuuid(player, puuid) {
+  if (!puuid) return false
+  return player?.puuid === puuid || player?.obfuscatedPuuid === puuid
+}
+
+function displayName(player) {
+  return [
+    player?.summonerName,
+    player?.gameName && player?.tagLine ? `${player.gameName}#${player.tagLine}` : '',
+    player?.gameName,
+  ].find(Boolean) || ''
+}
+
+function normalizePlayerName(value) {
+  return String(value || '').trim().toLowerCase()
 }
 
 module.exports = {

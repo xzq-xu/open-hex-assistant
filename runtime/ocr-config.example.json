@@ -65,6 +65,10 @@
     "pollMs": 1000,
     "allowedPhases": ["InProgress", "Reconnect"]
   },
+  "coach": {
+    "enabled": true,
+    "passivePollMs": 2200
+  },
   "output": {
     "stateFile": "runtime/overlay-state.json"
   }

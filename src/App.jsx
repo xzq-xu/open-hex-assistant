@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Activity, Boxes, Database, RefreshCw, Search, Sparkles, Swords, Zap } from 'lucide-react'
+import { Activity, Boxes, Brain, Database, RefreshCw, Search, Sparkles, Swords, Target, Zap } from 'lucide-react'
 import { CalibrationApp } from './CalibrationApp.jsx'
 import { augmentIconUrl, itemIconUrl, loadMayhemChampion, loadStaticData } from './lib/api.js'
+import { buildCoachInsights } from './lib/coach.js'
 import { buildRecommendations } from './lib/recommendation.js'
 import { formatCount, formatPercent, normalizeSearchText } from './lib/format.js'
 import { candidateIds, recognitionStatus, resolveCandidateAugments } from './lib/realtime.js'
@@ -93,6 +94,9 @@ export function App() {
     if (!staticData || !row) return null
     return buildRecommendations(row, staticData, candidateAugmentIds)
   }, [staticData, row, candidateAugmentIds])
+  const coachInsights = useMemo(() => (
+    buildCoachInsights(runtimeState?.coach, staticData, recommendation)
+  ), [runtimeState, staticData, recommendation])
 
   const champions = useMemo(() => {
     const needle = normalizeSearchText(query)
@@ -121,6 +125,7 @@ export function App() {
         error={error}
         staticData={staticData}
         runtimeState={runtimeState}
+        coachInsights={coachInsights}
       />
     )
   }
@@ -190,6 +195,8 @@ export function App() {
           </div>
 
           {error && <div className="alert">{error}</div>}
+
+          {coachInsights && <CoachPanel coach={coachInsights} />}
 
           <section className="recognition-panel">
             <div className="recognition-header">
@@ -299,6 +306,121 @@ function RecommendationSection({ icon, title, items, renderItem, empty, gridClas
   )
 }
 
+function CoachPanel({ coach, compact = false }) {
+  const primaryPlan = coach.itemPlan[0] || coach.playbook[0]
+  const threatLine = coach.threats?.[0]
+    ? { label: '优先盯防', text: `${coach.threats[0].championName}：${coach.threats[0].threatReason}` }
+    : null
+  const tacticalLines = compact
+    ? [threatLine, ...coach.playbook.slice(0, 1), ...coach.itemPlan.slice(0, 1)].filter(Boolean)
+    : [...coach.playbook, ...coach.itemPlan].slice(0, 5)
+
+  return (
+    <section className={`coach-panel${compact ? ' is-compact' : ''}`}>
+      <div className="coach-header">
+        <div>
+          <div className="eyebrow">{coach.sourceLabel} / {coach.phaseLabel}</div>
+          <h3>{coach.headline}</h3>
+        </div>
+        <span>{coach.confidenceLabel}</span>
+      </div>
+
+      {primaryPlan && (
+        <div className="coach-spotlight">
+          <Brain size={18} />
+          <p>{coach.matchup}</p>
+        </div>
+      )}
+
+      <div className="coach-teams">
+        <CoachTeam title="我方" players={coach.myTeam} />
+        <CoachTeam title="敌方" players={coach.enemyTeam} />
+      </div>
+
+      <CoachScoreboard scoreboard={coach.scoreboard} compact={compact} />
+
+      {!compact && coach.threats?.length > 0 && (
+        <div className="coach-threats">
+          {coach.threats.map((threat) => (
+            <article key={`threat-${threat.slot}-${threat.championId || threat.championName}`}>
+              {threat.image ? <img src={threat.image} alt="" /> : <em>{threat.championName.slice(0, 1)}</em>}
+              <div>
+                <strong>{threat.championName}</strong>
+                <span>{threat.threatType}</span>
+                <small>{threat.threatReason}</small>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      <div className="coach-lines">
+        {tacticalLines.map((line, index) => (
+          <div className="coach-line" key={`${line.label}-${index}`}>
+            <strong>{line.label}</strong>
+            <span>{line.text}</span>
+          </div>
+        ))}
+      </div>
+
+      {!compact && coach.augmentPlan.length > 0 && (
+        <div className="coach-augment-plan">
+          {coach.augmentPlan.map((line) => (
+            <div key={line.label}>
+              <Target size={14} />
+              <span>{line.label}</span>
+              <small>{line.text}</small>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function CoachScoreboard({ scoreboard, compact }) {
+  if (!scoreboard) return null
+  const items = scoreboard.myItems?.length ? scoreboard.myItems.join(' / ') : ''
+  const details = [
+    scoreboard.gameTime > 0 ? formatGameTime(scoreboard.gameTime) : '',
+    scoreboard.myLevel > 0 ? `Lv.${scoreboard.myLevel}` : '',
+    items,
+  ].filter(Boolean)
+
+  if (!details.length && compact) return null
+
+  return (
+    <div className="coach-scoreboard">
+      <span>{details.length ? details.join(' · ') : '等待局内装备数据'}</span>
+      {!compact && (
+        <small>已知装备：我方 {scoreboard.allyKnownItems} / 敌方 {scoreboard.enemyKnownItems}</small>
+      )}
+    </div>
+  )
+}
+
+function CoachTeam({ title, players }) {
+  return (
+    <div className="coach-team">
+      <span>{title}</span>
+      <div>
+        {players.slice(0, 5).map((player) => (
+          player.image
+            ? <img key={`${title}-${player.slot}-${player.championId}`} src={player.image} title={player.championName} alt="" />
+            : <em key={`${title}-${player.slot}-${player.championId}`}>{player.championName.slice(0, 1)}</em>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function formatGameTime(seconds) {
+  const total = Math.max(0, Math.floor(Number(seconds || 0)))
+  const minutes = Math.floor(total / 60)
+  const rest = String(total % 60).padStart(2, '0')
+  return `${minutes}:${rest}`
+}
+
 function ItemCard({ item, staticData, accent = false }) {
   const data = staticData?.items[String(item.id)]
   return (
@@ -335,7 +457,7 @@ function AugmentCard({ augment, selected, onClick, staticData, compact = false }
   )
 }
 
-function OverlayShell({ selectedChampion, selectedChampionId, recommendation, recognizedCandidates, loading, error, staticData, runtimeState }) {
+function OverlayShell({ selectedChampion, selectedChampionId, recommendation, recognizedCandidates, loading, error, staticData, runtimeState, coachInsights }) {
   const candidateAugments = recommendation?.candidateAugments?.slice(0, 3) ?? []
   const ocr = runtimeState?.ocr
   const ocrStatus = ocr?.elapsedMs ? `OCR ${ocr.elapsedMs}ms${ocr.withinTarget === false ? ' 超时' : ''}` : ''
@@ -375,6 +497,8 @@ function OverlayShell({ selectedChampion, selectedChampionId, recommendation, re
         ) : (
           <div className="overlay-message">{emptyMessage}</div>
         )}
+
+        {coachInsights && <CoachPanel coach={coachInsights} compact />}
       </section>
     </main>
   )
@@ -390,6 +514,7 @@ function ocrPhaseLabel(ocr) {
   if (ocr.phase === 'hero-refreshed') return `英雄已刷新${ocr.lcu?.championSource ? ` (${ocr.lcu.championSource})` : ''}`
   if (ocr.phase === 'reset') return '已重置，等待海克斯选择'
   if (ocr.phase === 'augment-pick-active') return '海克斯选择已触发'
+  if (ocr.phase === 'coach-refreshed') return '战术已重评估'
   if (ocr.phase === 'error') return 'OCR 异常'
   return ''
 }

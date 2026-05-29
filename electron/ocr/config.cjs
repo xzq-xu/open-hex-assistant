@@ -67,6 +67,10 @@ function defaultOcrConfig(env = process.env) {
       pollMs: Number(env.LCU_POLL_MS || 1000),
       allowedPhases: parseList(env.LCU_ALLOWED_PHASES) || ['InProgress', 'Reconnect'],
     },
+    coach: {
+      enabled: parseBool(env.COACH_ENABLED, true),
+      passivePollMs: Number(env.COACH_PASSIVE_POLL_MS || 2200),
+    },
     output: {
       stateFile: '',
     },
@@ -124,6 +128,10 @@ function mergeOcrConfig(base, override = {}) {
       ...base.lcu,
       ...(override.lcu || {}),
     },
+    coach: {
+      ...base.coach,
+      ...(override.coach || {}),
+    },
     output: {
       ...base.output,
       ...(override.output || {}),
@@ -153,6 +161,7 @@ function normalizeOcrConfig(config) {
     },
     automation: normalizeAutomation(config.automation),
     lcu: normalizeLcu(config.lcu),
+    coach: normalizeCoach(config.coach),
     output: {
       ...config.output,
     },
@@ -223,6 +232,14 @@ function normalizeAutomation(automation = {}) {
       ? automation.processNames.map((name) => String(name).trim()).filter(Boolean)
       : ['League of Legends', 'League of Legends.exe'],
     trigger: normalizeTrigger(automation.trigger),
+  }
+}
+
+function normalizeCoach(coach = {}) {
+  return {
+    ...coach,
+    enabled: coach.enabled !== false,
+    passivePollMs: Math.max(500, Math.round(numberOr(coach.passivePollMs, 2200))),
   }
 }
 

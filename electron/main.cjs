@@ -217,7 +217,7 @@ function createOverlayWindow() {
   const calibration = isCalibrationMode()
   const display = screen.getPrimaryDisplay()
   const width = calibration ? Math.min(1180, display.workArea.width - 48) : 660
-  const height = calibration ? Math.min(820, display.workArea.height - 48) : 320
+  const height = calibration ? Math.min(820, display.workArea.height - 48) : 460
   const x = display.workArea.x + 24
   const y = display.workArea.y + 24
 
@@ -283,6 +283,7 @@ app.whenReady().then(() => {
   registerShortcut('F6', () => sendOcrCommand('recognize-now'))
   registerShortcut('F7', () => sendOcrCommand('refresh-hero'))
   registerShortcut('F8', () => sendOcrCommand('reset'))
+  registerShortcut('F9', () => sendOcrCommand('coach-now'))
   registerShortcut('CommandOrControl+Shift+O', toggleClickThrough)
   registerShortcut('CommandOrControl+Shift+R', () => {
     overlayWindow?.reload()

@@ -120,6 +120,19 @@ class LcuClient {
     })
   }
 
+  getLiveAllGameData() {
+    return httpsJsonRequest({
+      hostname: '127.0.0.1',
+      port: 2999,
+      path: '/liveclientdata/allgamedata',
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
+      timeoutMs: 1200,
+    })
+  }
+
   observe(uri, callback) {
     let listeners = this.eventListeners.get(uri)
     if (!listeners) {

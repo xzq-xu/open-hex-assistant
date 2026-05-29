@@ -15,6 +15,11 @@
 - 为候选海克斯展示 `S+ / S / A / B / C / D` 评级和一句话理由。
 - 通过 Electron 运行透明、置顶、可鼠标穿透的游戏内 overlay。
 - 通过本地 ONNX PaddleOCR 识别屏幕裁剪区域。
+- 通过 LCU / Live Client Data 读取阵容和局内装备，提供本地战术 Coach 与 F9 重评估。
+
+## 路线图
+
+后续开发以 [ROADMAP.md](ROADMAP.md) 为准。新增功能需要优先符合“本地优先、国服数据优先、可解释、低延迟、无授权绑定”的主线。
 
 ## 预览
 
@@ -142,6 +147,7 @@ lcu-disconnected -> lcu-waiting -> game-running -> augment-pick-active -> game-r
 - `game-running`：LCU 已进入游戏中，只做轻量截图触发检测。
 - `augment-pick-active`：检测到三选一界面，才识别三个标题 ROI 并推送推荐。
 - `hero-refreshed`：手动刷新了英雄识别结果。
+- `coach-refreshed`：手动刷新了阵容、装备和战术建议。
 - `reset`：清空本轮识别结果，回到等待状态。
 
 运行时兜底热键：
@@ -149,6 +155,19 @@ lcu-disconnected -> lcu-waiting -> game-running -> augment-pick-active -> game-r
 - `F6`：立即识别当前屏幕，绕过自动触发 gate。
 - `F7`：立即刷新当前英雄，优先使用 ChampSelect / GameFlow / Live Client Data。
 - `F8`：清空本轮 OCR 候选并回到等待状态。
+- `F9`：立即从 LCU / Live Client Data 重评估阵容、装备和战术建议。
+
+## 本地战术 Coach
+
+Coach 默认开启，不依赖外部 AI、不上传截图。它会在加载/开局阶段通过 LCU 读取双方阵容；进入游戏后优先读取 Live Client Data 的 `allgamedata`，拿到双方英雄、等级和当前装备，再结合本地统计推荐生成：
+
+- 双方阵容类型判断。
+- 一句话团战策略。
+- 敌方前三威胁点和对应原因。
+- 下一件装备和局势变招。
+- 本轮候选海克斯的取舍摘要。
+
+Overlay 会在海克斯推荐下方展示 Coach 面板。用户切屏或死亡后，可以按 `F9` 手动重评估当前局势。
 
 校准三个标题裁剪区域：
 
@@ -172,11 +191,13 @@ npx cross-env OCR_FORCE_ACTIVE=1 npm run overlay:ocr:dev
 npx cross-env OCR_IDLE_POLL_MS=1000 OCR_GAME_POLL_MS=180 npm run overlay:ocr:dev
 npx cross-env OCR_POLL_MS=80 npm run overlay:ocr:dev
 npx cross-env OCR_CROP_SCALE=2 OCR_CROP_GRAYSCALE=1 npm run overlay:ocr:dev
+npx cross-env COACH_ENABLED=0 npm run overlay:ocr:dev
+npx cross-env COACH_PASSIVE_POLL_MS=3000 npm run overlay:ocr:dev
 npx cross-env OCR_DEBUG=1 npm run ocr:probe
 npx cross-env PADDLEOCR_REC_MODEL=C:/path/rec.onnx PADDLEOCR_DICT=C:/path/ppocr_keys_v1.txt npm run ocr:probe
 ```
 
-`LCU_ENABLED=0` 会关闭 LCU 门控并回退到进程/画面检测；`LCU_REQUIRE_GAMEFLOW=0` 会让 LCU 断开时仍允许旧门控继续工作；`OCR_AUTO_GATE=0` 会回到旧的持续 OCR 行为；`OCR_FORCE_ACTIVE=1` 用于调试，直接强制进入识别态。`OCR_CROP_SCALE` 默认是 `2`，会在识别前放大标题裁剪图；性能较弱的机器可以调成 `1`。
+`LCU_ENABLED=0` 会关闭 LCU 门控并回退到进程/画面检测；`LCU_REQUIRE_GAMEFLOW=0` 会让 LCU 断开时仍允许旧门控继续工作；`OCR_AUTO_GATE=0` 会回到旧的持续 OCR 行为；`OCR_FORCE_ACTIVE=1` 用于调试，直接强制进入识别态。`COACH_ENABLED=0` 只关闭本地战术 Coach，不影响海克斯 OCR。`OCR_CROP_SCALE` 默认是 `2`，会在识别前放大标题裁剪图；性能较弱的机器可以调成 `1`。
 
 Windows 默认 OCR execution providers：
 
@@ -244,5 +265,4 @@ release/Open Hex Assistant-0.1.0-win-x64.zip
 
 ## 后续计划
 
-- 为关键流派补充装备 + 海克斯条件规则，例如 Destroying Ritual、Critical Healing 等。
-- 为 Windows 构建补充签名安装包。
+见 [ROADMAP.md](ROADMAP.md)。

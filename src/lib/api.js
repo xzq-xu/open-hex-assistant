@@ -45,6 +45,7 @@ export async function loadStaticData(signal) {
       alias: champion.id,
       name: champion.name,
       title: champion.title,
+      tags: champion.tags || [],
       image: `${DDRAGON_CDN}/${version}/img/champion/${champion.image.full}`,
     }))
     .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))

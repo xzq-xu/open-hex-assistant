@@ -4,5 +4,31 @@
     "秘术冲拳",
     "质变：棱彩阶",
     "会心治疗"
-  ]
+  ],
+  "coach": {
+    "enabled": true,
+    "connected": true,
+    "source": "live-client-data",
+    "trigger": "manual-hotkey",
+    "phase": "InProgress",
+    "gameTime": 720,
+    "myChampionId": 777,
+    "myPlayer": {
+      "championId": 777,
+      "isSelf": true,
+      "level": 11,
+      "itemIds": [3006, 6672, 3031],
+      "score": { "kills": 6, "deaths": 3, "assists": 12 }
+    },
+    "myTeam": [
+      { "championId": 777, "isSelf": true, "level": 11, "itemIds": [3006, 6672, 3031] },
+      { "championId": 89, "level": 10, "itemIds": [3190, 3047] },
+      { "championId": 51, "level": 10, "itemIds": [6672, 3006] }
+    ],
+    "enemyTeam": [
+      { "championId": 63, "level": 12, "itemIds": [6653, 3020, 3916], "score": { "kills": 8, "deaths": 2, "assists": 10 } },
+      { "championId": 122, "level": 11, "itemIds": [3071, 3047, 3748] },
+      { "championId": 412, "level": 10, "itemIds": [3190, 3111] }
+    ]
+  }
 }

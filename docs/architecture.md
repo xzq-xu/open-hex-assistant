@@ -4,6 +4,10 @@
 
 Build an open-source ARAM Mayhem assistant without copying proprietary code or using license/device binding.
 
+## Roadmap Alignment
+
+Development should follow the root [ROADMAP.md](../ROADMAP.md). Architecture changes must preserve the local-first, explainable, no-auth-lock-in direction unless the roadmap is updated first.
+
 ## Modules
 
 ```mermaid
@@ -13,7 +17,10 @@ flowchart LR
   Stats["Public Stats Cache"] --> Engine["Recommendation Engine"]
   Meta["Data Dragon + Augment Metadata"] --> Engine
   State --> Engine
+  State --> Coach["Local Strategy Coach"]
+  Engine --> Coach
   OCR --> Engine
+  Coach --> UI
   Engine --> UI["Control Panel / Overlay"]
   UI --> Shell["Transparent Electron Shell"]
 ```
@@ -24,9 +31,11 @@ flowchart LR
 - `currentItems`
 - `selectedAugments`
 - `candidateAugments`
+- `teamRosters`
+- `enemyRoster`
 - `patch`
 
-The current web MVP supports `championId` and `candidateAugments`. Desktop integration should fill the other fields.
+The current renderer supports `championId`, `candidateAugments`, and local Coach inputs from the Electron worker. Desktop integration fills current items and roster state through LCU / Live Client Data.
 
 ## Realtime OCR Boundary
 
@@ -72,6 +81,30 @@ flowchart LR
 
 It uses fixed title ROIs instead of a detector model. That is the correct default for a 500 ms requirement because the three card locations are predictable during augment selection. The worker does not run PaddleOCR continuously by default: it connects to LCU over HTTP/WebSocket, waits for an in-game gameflow phase, resolves the local champion, then runs a cheap image-statistics trigger over the calibrated title strips, and only runs OCR while the augment picker is active. If LCU is briefly unavailable while the game is already running, the worker can use the Live Client Data API on port `2999` as a game/champion fallback.
 
+## Local Strategy Coach
+
+The Coach feature is intentionally local-first. It does not call Gemini, OpenAI, or any remote inference service by default.
+
+```mermaid
+flowchart LR
+  Session["LCU gameflow session"] --> Roster["Roster Snapshot"]
+  Live["Live Client Data allgamedata"] --> Roster
+  Roster --> Coach["Local Coach Rules"]
+  Rec["Item + augment recommendation"] --> Coach
+  Meta["Data Dragon tags"] --> Coach
+  Coach --> Overlay["Overlay Coach Panel"]
+```
+
+During loading or game start, the worker reads `gameData.teamOne` and `gameData.teamTwo` from `/lol-gameflow/v1/session`. During the match, it prefers `https://127.0.0.1:2999/liveclientdata/allgamedata`, which gives structured players, levels, and item ids. The renderer then classifies compositions from Data Dragon champion tags and combines that with the current recommendation result to show:
+
+- composition matchup
+- teamfight plan
+- top enemy threats with deterministic reasons
+- next-item and situational item notes
+- candidate augment summary
+
+`F9` sends `coach-now` to the worker and forces an immediate snapshot. Passive Coach refreshes are throttled by `COACH_PASSIVE_POLL_MS`.
+
 ## ROI Calibration
 
 Calibration runs as a separate Electron mode:
@@ -114,10 +147,12 @@ Runtime controls:
 - `OCR_CROP_SCALE`: title crop upsample factor before OCR, defaults to `2`
 - `OCR_CROP_GRAYSCALE=0`: disable grayscale conversion before OCR
 - `OCR_CROP_SHARPEN=1`: enable crop sharpening before OCR
+- `COACH_ENABLED=0`: disable only the local strategy Coach
+- `COACH_PASSIVE_POLL_MS`: minimum passive Coach refresh interval
 - `OCR_DEBUG=1`: write the cropped card title images to `runtime/ocr-debug`
 - `OVERLAY_CLICK_THROUGH=0`: disable mouse passthrough for testing
 
-Default behavior is mouse passthrough so the overlay does not block in-game clicks. `F6` forces one recognition pass, `F7` refreshes champion detection, `F8` clears the current OCR candidates, `CommandOrControl+Shift+O` toggles passthrough, and `CommandOrControl+Shift+R` reloads the overlay.
+Default behavior is mouse passthrough so the overlay does not block in-game clicks. `F6` forces one recognition pass, `F7` refreshes champion detection, `F8` clears the current OCR candidates, `F9` refreshes Coach strategy state, `CommandOrControl+Shift+O` toggles passthrough, and `CommandOrControl+Shift+R` reloads the overlay.
 
 The watched JSON file should use this shape:
 
@@ -179,6 +214,8 @@ Runtime config and OCR state should be written under Electron's user-data direct
 - one-line candidate augment reason
 - regular core items
 - high-win archetype items
+- local Coach composition and item notes
+- local Coach threat list and scoreboard-derived item signals
 - data source and patch
 
 ## Auth Removed

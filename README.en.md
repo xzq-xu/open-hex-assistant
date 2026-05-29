@@ -15,6 +15,11 @@ This project is a clean-room implementation. It does not include license-key che
 - Show each candidate augment with an `S+ / S / A / B / C / D` grade and a one-line reason.
 - Run a transparent, always-on-top, mouse-pass-through Electron overlay for in-game display.
 - Run a local ONNX PaddleOCR recognition worker against screen crops.
+- Read rosters and live items through LCU / Live Client Data for a local strategy Coach with F9 re-evaluation.
+
+## Roadmap
+
+Future work follows [ROADMAP.en.md](ROADMAP.en.md). New features should stay aligned with the local-first, China-region-data-first, explainable, low-latency, no-auth-lock-in direction.
 
 ## Preview
 
@@ -142,6 +147,7 @@ lcu-disconnected -> lcu-waiting -> game-running -> augment-pick-active -> game-r
 - `game-running`: LCU is in-game; only lightweight screenshot trigger detection runs.
 - `augment-pick-active`: the three-choice augment screen is detected; the worker recognizes the three title ROIs and pushes recommendations.
 - `hero-refreshed`: the current champion was refreshed manually.
+- `coach-refreshed`: roster, item state, and strategy advice were refreshed manually.
 - `reset`: current OCR candidates were cleared and the worker returned to waiting.
 
 Runtime fallback hotkeys:
@@ -149,6 +155,19 @@ Runtime fallback hotkeys:
 - `F6`: recognize the current screen immediately, bypassing the automatic trigger gate.
 - `F7`: refresh the current champion through ChampSelect / GameFlow / Live Client Data.
 - `F8`: clear the current OCR candidates and return to waiting.
+- `F9`: re-evaluate roster, current items, and strategy through LCU / Live Client Data.
+
+## Local Strategy Coach
+
+Coach is enabled by default and does not require external AI or screenshot upload. During loading and game start it reads both rosters from LCU. Once in-game, it prefers Live Client Data `allgamedata` for champions, levels, and current items, then combines that state with local recommendation statistics to produce:
+
+- both-team composition classification
+- one-line teamfight plan
+- top-three enemy threats with reasons
+- next-item and situational build adjustments
+- a short summary for the current candidate augments
+
+The overlay shows the Coach panel below augment recommendations. Press `F9` after tabbing out, dying, or checking the scoreboard to force a fresh evaluation.
 
 Calibrate the three title crop rectangles:
 
@@ -172,11 +191,13 @@ npx cross-env OCR_FORCE_ACTIVE=1 npm run overlay:ocr:dev
 npx cross-env OCR_IDLE_POLL_MS=1000 OCR_GAME_POLL_MS=180 npm run overlay:ocr:dev
 npx cross-env OCR_POLL_MS=80 npm run overlay:ocr:dev
 npx cross-env OCR_CROP_SCALE=2 OCR_CROP_GRAYSCALE=1 npm run overlay:ocr:dev
+npx cross-env COACH_ENABLED=0 npm run overlay:ocr:dev
+npx cross-env COACH_PASSIVE_POLL_MS=3000 npm run overlay:ocr:dev
 npx cross-env OCR_DEBUG=1 npm run ocr:probe
 npx cross-env PADDLEOCR_REC_MODEL=C:/path/rec.onnx PADDLEOCR_DICT=C:/path/ppocr_keys_v1.txt npm run ocr:probe
 ```
 
-`LCU_ENABLED=0` disables LCU gating and falls back to process/screen gating; `LCU_REQUIRE_GAMEFLOW=0` allows the old gates to continue when LCU is disconnected; `OCR_AUTO_GATE=0` returns to the old continuous-OCR behavior; `OCR_FORCE_ACTIVE=1` is for debugging and forces the worker into the recognition phase. `OCR_CROP_SCALE` defaults to `2` and upsamples title crops before recognition; use `1` on slower machines.
+`LCU_ENABLED=0` disables LCU gating and falls back to process/screen gating; `LCU_REQUIRE_GAMEFLOW=0` allows the old gates to continue when LCU is disconnected; `OCR_AUTO_GATE=0` returns to the old continuous-OCR behavior; `OCR_FORCE_ACTIVE=1` is for debugging and forces the worker into the recognition phase. `COACH_ENABLED=0` disables only the local strategy Coach, not augment OCR. `OCR_CROP_SCALE` defaults to `2` and upsamples title crops before recognition; use `1` on slower machines.
 
 On Windows, the default OCR execution providers are:
 
@@ -244,5 +265,4 @@ This project is licensed under the [MIT License](LICENSE).
 
 ## Next Steps
 
-- Add item + augment conditional rules for strong archetypes such as Destroying Ritual and Critical Healing.
-- Add signed Windows installers.
+See [ROADMAP.en.md](ROADMAP.en.md).
