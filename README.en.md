@@ -92,10 +92,10 @@ Expected JSON shape:
 The low-latency path is:
 
 ```text
-LCU gameflow/champion detection -> lightweight augment-pick screen detection -> crop three fixed title ROIs -> PaddleOCR ONNX recognition -> overlay state
+LCU/Live Client Data champion detection -> lightweight augment-pick screen detection -> crop three fixed title ROIs -> PaddleOCR ONNX recognition -> overlay state
 ```
 
-It intentionally skips full-screen text detection. The continuous worker does not OCR indiscriminately by default: it first connects to LCU, reads gameflow and the current champion, and only starts lightweight screenshot trigger detection after LCU reaches `InProgress` / `Reconnect`. PaddleOCR starts only after the three-choice augment screen is detected. The three card locations are stable during augment selection, so calibrated title crops are the key to staying near the 500 ms target.
+It intentionally skips full-screen text detection. The continuous worker does not OCR indiscriminately by default: it first connects to LCU, reads gameflow and the current champion, and falls back to the in-game Live Client Data API when LCU is temporarily unavailable. Lightweight screenshot trigger detection starts only after the game is actually running. PaddleOCR starts only after the three-choice augment screen is detected. The three card locations are stable during augment selection, so calibrated title crops are the key to staying near the 500 ms target.
 
 Prepare model files:
 
@@ -141,6 +141,14 @@ lcu-disconnected -> lcu-waiting -> game-running -> augment-pick-active -> game-r
 - `lcu-waiting`: LCU is connected, but gameflow has not entered an in-game phase.
 - `game-running`: LCU is in-game; only lightweight screenshot trigger detection runs.
 - `augment-pick-active`: the three-choice augment screen is detected; the worker recognizes the three title ROIs and pushes recommendations.
+- `hero-refreshed`: the current champion was refreshed manually.
+- `reset`: current OCR candidates were cleared and the worker returned to waiting.
+
+Runtime fallback hotkeys:
+
+- `F6`: recognize the current screen immediately, bypassing the automatic trigger gate.
+- `F7`: refresh the current champion through ChampSelect / GameFlow / Live Client Data.
+- `F8`: clear the current OCR candidates and return to waiting.
 
 Calibrate the three title crop rectangles:
 
@@ -163,11 +171,12 @@ npx cross-env OCR_REQUIRE_LEAGUE_PROCESS=0 npm run overlay:ocr:dev
 npx cross-env OCR_FORCE_ACTIVE=1 npm run overlay:ocr:dev
 npx cross-env OCR_IDLE_POLL_MS=1000 OCR_GAME_POLL_MS=180 npm run overlay:ocr:dev
 npx cross-env OCR_POLL_MS=80 npm run overlay:ocr:dev
+npx cross-env OCR_CROP_SCALE=2 OCR_CROP_GRAYSCALE=1 npm run overlay:ocr:dev
 npx cross-env OCR_DEBUG=1 npm run ocr:probe
 npx cross-env PADDLEOCR_REC_MODEL=C:/path/rec.onnx PADDLEOCR_DICT=C:/path/ppocr_keys_v1.txt npm run ocr:probe
 ```
 
-`LCU_ENABLED=0` disables LCU gating and falls back to process/screen gating; `LCU_REQUIRE_GAMEFLOW=0` allows the old gates to continue when LCU is disconnected; `OCR_AUTO_GATE=0` returns to the old continuous-OCR behavior; `OCR_FORCE_ACTIVE=1` is for debugging and forces the worker into the recognition phase.
+`LCU_ENABLED=0` disables LCU gating and falls back to process/screen gating; `LCU_REQUIRE_GAMEFLOW=0` allows the old gates to continue when LCU is disconnected; `OCR_AUTO_GATE=0` returns to the old continuous-OCR behavior; `OCR_FORCE_ACTIVE=1` is for debugging and forces the worker into the recognition phase. `OCR_CROP_SCALE` defaults to `2` and upsamples title crops before recognition; use `1` on slower machines.
 
 On Windows, the default OCR execution providers are:
 
@@ -182,7 +191,7 @@ npx cross-env OCR_EXECUTION_PROVIDERS=cpu npm run overlay:ocr:dev
 npx cross-env OCR_EXECUTION_PROVIDERS=dml,cpu npm run overlay:ocr:dev
 ```
 
-For the 500 ms target, keep League in borderless/windowed mode, calibrate `runtime/ocr-config.json` to crop only the three title strips, and keep the worker running so the ONNX session is already warmed.
+For the 500 ms target, calibrate `runtime/ocr-config.json` to crop only the three title strips and keep the worker running so the ONNX session is already warmed. If the overlay cannot stay above fullscreen League on a specific system, switch the game display mode to borderless as the fallback.
 
 ## Windows Packaging
 
@@ -217,6 +226,8 @@ release/Open Hex Assistant-0.1.0-win-x64.zip
 ```
 
 The zip includes Electron, Windows native dependencies, the PaddleOCR ONNX model, and the dictionary. The Windows machine only needs to unzip and run it; Node.js and GitHub access are not required. Runtime configuration and state are written to the user-data directory, so the program directory can remain read-only.
+
+Packaged Windows executables start the built-in OCR worker by default. Development still uses `npm run overlay:ocr:dev` to opt in explicitly; set `OCR_ENABLED=0` to disable OCR temporarily in packaged builds.
 
 ## No Auth Design
 

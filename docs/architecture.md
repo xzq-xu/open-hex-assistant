@@ -60,7 +60,7 @@ The implemented worker uses this gated faster path:
 
 ```mermaid
 flowchart LR
-  LCU["LCU HTTP + WebSocket"] --> Game["Gameflow + champion gate"]
+  LCU["LCU HTTP + WebSocket + Live API"] --> Game["Gameflow + champion gate"]
   Game --> Capture["screenshot-desktop"]
   Capture --> Trigger["Augment-pick screen trigger"]
   Trigger --> Crop["Sharp ROI crops"]
@@ -70,7 +70,7 @@ flowchart LR
   Electron --> Overlay["React overlay"]
 ```
 
-It uses fixed title ROIs instead of a detector model. That is the correct default for a 500 ms requirement because the three card locations are predictable during augment selection. The worker does not run PaddleOCR continuously by default: it connects to LCU over HTTP/WebSocket, waits for an in-game gameflow phase, resolves the local champion, then runs a cheap image-statistics trigger over the calibrated title strips, and only runs OCR while the augment picker is active.
+It uses fixed title ROIs instead of a detector model. That is the correct default for a 500 ms requirement because the three card locations are predictable during augment selection. The worker does not run PaddleOCR continuously by default: it connects to LCU over HTTP/WebSocket, waits for an in-game gameflow phase, resolves the local champion, then runs a cheap image-statistics trigger over the calibrated title strips, and only runs OCR while the augment picker is active. If LCU is briefly unavailable while the game is already running, the worker can use the Live Client Data API on port `2999` as a game/champion fallback.
 
 ## ROI Calibration
 
@@ -102,7 +102,7 @@ Runtime controls:
 - `OVERLAY_CHAMPION`: champion id, for example `777`
 - `OVERLAY_CANDIDATES`: three candidate augment names or ids separated by `|`, comma, semicolon, or newline
 - `OVERLAY_STATE_FILE`: JSON file watched every 500 ms for live OCR results
-- `OCR_ENABLED=1`: start the built-in OCR worker from Electron
+- `OCR_ENABLED=1`: start the built-in OCR worker from Electron in development; packaged builds start it by default unless `OCR_ENABLED=0`
 - `OCR_CONFIG`: path to `runtime/ocr-config.json`
 - `OCR_NODE`: optional external Node executable for the OCR worker; by default Electron runs the worker through its own Node runtime
 - `OCR_AUTO_GATE=0`: disable automatic LoL/augment gating and run continuous OCR
@@ -111,10 +111,13 @@ Runtime controls:
 - `OCR_IDLE_POLL_MS`: process check interval while LoL is absent
 - `OCR_GAME_POLL_MS`: lightweight trigger interval while LoL is running
 - `OCR_POLL_MS`: capture interval in milliseconds
+- `OCR_CROP_SCALE`: title crop upsample factor before OCR, defaults to `2`
+- `OCR_CROP_GRAYSCALE=0`: disable grayscale conversion before OCR
+- `OCR_CROP_SHARPEN=1`: enable crop sharpening before OCR
 - `OCR_DEBUG=1`: write the cropped card title images to `runtime/ocr-debug`
 - `OVERLAY_CLICK_THROUGH=0`: disable mouse passthrough for testing
 
-Default behavior is mouse passthrough so the overlay does not block in-game clicks. `CommandOrControl+Shift+O` toggles passthrough and `CommandOrControl+Shift+R` reloads the overlay.
+Default behavior is mouse passthrough so the overlay does not block in-game clicks. `F6` forces one recognition pass, `F7` refreshes champion detection, `F8` clears the current OCR candidates, `CommandOrControl+Shift+O` toggles passthrough, and `CommandOrControl+Shift+R` reloads the overlay.
 
 The watched JSON file should use this shape:
 

@@ -95,8 +95,29 @@ class LcuClient {
     return this.get('/lol-gameflow/v1/session')
   }
 
+  getChampSelectSession() {
+    return this.get('/lol-champ-select/v1/session')
+  }
+
   getCurrentSummoner() {
     return this.get('/lol-summoner/v1/current-summoner')
+  }
+
+  getChampionSummary() {
+    return this.get('/lol-game-data/assets/v1/champion-summary.json')
+  }
+
+  getLiveActivePlayer() {
+    return httpsJsonRequest({
+      hostname: '127.0.0.1',
+      port: 2999,
+      path: '/liveclientdata/activeplayer',
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
+      timeoutMs: 1200,
+    })
   }
 
   observe(uri, callback) {
@@ -327,6 +348,11 @@ function httpsJsonRequest(options) {
     })
 
     request.on('error', reject)
+    if (options.timeoutMs) {
+      request.setTimeout(options.timeoutMs, () => {
+        request.destroy(new Error(`[LCU] ${options.method} ${options.path} timed out after ${options.timeoutMs}ms`))
+      })
+    }
     if (options.body != null) request.write(options.body)
     request.end()
   })

@@ -84,14 +84,14 @@ function startStateFileWatcher() {
 }
 
 function startOcrWorker() {
-  if (process.env.OCR_ENABLED !== '1') return
+  if (!ocrEnabled()) return
 
   const workerRuntime = ocrWorkerRuntime()
   const workerPath = path.join(appRoot(), 'electron', 'ocr-worker.cjs')
   ocrWorker = spawn(workerRuntime.command, [workerPath], {
     cwd: workerCwd(),
     env: workerRuntime.env,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['pipe', 'pipe', 'pipe'],
   })
 
   let stdoutBuffer = ''
@@ -127,6 +127,30 @@ function startOcrWorker() {
     pushRuntimeState()
     ocrWorker = null
   })
+}
+
+function ocrEnabled() {
+  if (isCalibrationMode()) return false
+  if (process.env.OCR_ENABLED === '0') return false
+  return app.isPackaged || process.env.OCR_ENABLED === '1'
+}
+
+function sendOcrCommand(type) {
+  if (!ocrWorker || !ocrWorker.stdin?.writable) {
+    latestOcrState = {
+      ...latestOcrState,
+      error: 'OCR worker is not running. Start with OCR_ENABLED=1 or use overlay:ocr:dev.',
+      ocr: {
+        ...(latestOcrState.ocr || {}),
+        ready: false,
+        phase: 'hotkey-unavailable',
+      },
+    }
+    pushRuntimeState()
+    return
+  }
+
+  ocrWorker.stdin.write(`${JSON.stringify({ type, requestedAt: new Date().toISOString() })}\n`)
 }
 
 function ocrWorkerRuntime() {
@@ -239,6 +263,13 @@ function toggleClickThrough() {
   overlayWindow.setIgnoreMouseEvents(clickThrough, { forward: true })
 }
 
+function registerShortcut(accelerator, handler) {
+  const registered = globalShortcut.register(accelerator, handler)
+  if (!registered) {
+    console.warn(`[shortcut] failed to register ${accelerator}`)
+  }
+}
+
 app.whenReady().then(() => {
   process.env.OPEN_HEX_APP_ROOT = appRoot()
   process.env.OPEN_HEX_RESOURCE_ROOT = resourceRoot()
@@ -249,8 +280,11 @@ app.whenReady().then(() => {
   startStateFileWatcher()
   startOcrWorker()
 
-  globalShortcut.register('CommandOrControl+Shift+O', toggleClickThrough)
-  globalShortcut.register('CommandOrControl+Shift+R', () => {
+  registerShortcut('F6', () => sendOcrCommand('recognize-now'))
+  registerShortcut('F7', () => sendOcrCommand('refresh-hero'))
+  registerShortcut('F8', () => sendOcrCommand('reset'))
+  registerShortcut('CommandOrControl+Shift+O', toggleClickThrough)
+  registerShortcut('CommandOrControl+Shift+R', () => {
     overlayWindow?.reload()
   })
 

@@ -92,10 +92,10 @@ JSON 格式：
 低延迟链路如下：
 
 ```text
-LCU gameflow/英雄识别 -> 海克斯选择界面轻量检测 -> 裁剪三个固定标题区域 -> PaddleOCR ONNX 识别 -> overlay 状态
+LCU/Live Client Data 英雄识别 -> 海克斯选择界面轻量检测 -> 裁剪三个固定标题区域 -> PaddleOCR ONNX 识别 -> overlay 状态
 ```
 
-这里刻意跳过全屏文字检测。持续 worker 默认不会无差别 OCR：它会先连接 LCU，读取 gameflow 和当前英雄；只有 LCU 进入 `InProgress` / `Reconnect` 后，才开始做轻量截图特征检测；确认进入海克斯三选一界面后才运行 PaddleOCR。海克斯选择界面的三张卡片位置稳定，校准标题区域后直接裁剪识别，是 500ms 目标内完成识别的关键。
+这里刻意跳过全屏文字检测。持续 worker 默认不会无差别 OCR：它会先连接 LCU，读取 gameflow 和当前英雄；如果 LCU 短暂不可用，会尝试游戏内 Live Client Data API 兜底。只有进入游戏中后，才开始做轻量截图特征检测；确认进入海克斯三选一界面后才运行 PaddleOCR。海克斯选择界面的三张卡片位置稳定，校准标题区域后直接裁剪识别，是 500ms 目标内完成识别的关键。
 
 准备模型文件：
 
@@ -141,6 +141,14 @@ lcu-disconnected -> lcu-waiting -> game-running -> augment-pick-active -> game-r
 - `lcu-waiting`：LCU 已连接，但 gameflow 还没有进入游戏中。
 - `game-running`：LCU 已进入游戏中，只做轻量截图触发检测。
 - `augment-pick-active`：检测到三选一界面，才识别三个标题 ROI 并推送推荐。
+- `hero-refreshed`：手动刷新了英雄识别结果。
+- `reset`：清空本轮识别结果，回到等待状态。
+
+运行时兜底热键：
+
+- `F6`：立即识别当前屏幕，绕过自动触发 gate。
+- `F7`：立即刷新当前英雄，优先使用 ChampSelect / GameFlow / Live Client Data。
+- `F8`：清空本轮 OCR 候选并回到等待状态。
 
 校准三个标题裁剪区域：
 
@@ -163,11 +171,12 @@ npx cross-env OCR_REQUIRE_LEAGUE_PROCESS=0 npm run overlay:ocr:dev
 npx cross-env OCR_FORCE_ACTIVE=1 npm run overlay:ocr:dev
 npx cross-env OCR_IDLE_POLL_MS=1000 OCR_GAME_POLL_MS=180 npm run overlay:ocr:dev
 npx cross-env OCR_POLL_MS=80 npm run overlay:ocr:dev
+npx cross-env OCR_CROP_SCALE=2 OCR_CROP_GRAYSCALE=1 npm run overlay:ocr:dev
 npx cross-env OCR_DEBUG=1 npm run ocr:probe
 npx cross-env PADDLEOCR_REC_MODEL=C:/path/rec.onnx PADDLEOCR_DICT=C:/path/ppocr_keys_v1.txt npm run ocr:probe
 ```
 
-`LCU_ENABLED=0` 会关闭 LCU 门控并回退到进程/画面检测；`LCU_REQUIRE_GAMEFLOW=0` 会让 LCU 断开时仍允许旧门控继续工作；`OCR_AUTO_GATE=0` 会回到旧的持续 OCR 行为；`OCR_FORCE_ACTIVE=1` 用于调试，直接强制进入识别态。
+`LCU_ENABLED=0` 会关闭 LCU 门控并回退到进程/画面检测；`LCU_REQUIRE_GAMEFLOW=0` 会让 LCU 断开时仍允许旧门控继续工作；`OCR_AUTO_GATE=0` 会回到旧的持续 OCR 行为；`OCR_FORCE_ACTIVE=1` 用于调试，直接强制进入识别态。`OCR_CROP_SCALE` 默认是 `2`，会在识别前放大标题裁剪图；性能较弱的机器可以调成 `1`。
 
 Windows 默认 OCR execution providers：
 
@@ -182,7 +191,7 @@ npx cross-env OCR_EXECUTION_PROVIDERS=cpu npm run overlay:ocr:dev
 npx cross-env OCR_EXECUTION_PROVIDERS=dml,cpu npm run overlay:ocr:dev
 ```
 
-想接近 500ms 目标，请保持游戏为无边框/窗口模式，把 `runtime/ocr-config.json` 只校准到三个标题文字条，并提前启动 worker，让 ONNX session 保持预热。
+想接近 500ms 目标，请把 `runtime/ocr-config.json` 只校准到三个标题文字条，并提前启动 worker，让 ONNX session 保持预热。如果全屏 overlay 在个别系统上无法置顶显示，再把游戏显示模式切到无边框作为兜底。
 
 ## Windows 打包
 
@@ -217,6 +226,8 @@ release/Open Hex Assistant-0.1.0-win-x64.zip
 ```
 
 这个 zip 会包含 Electron、Windows 原生依赖、PaddleOCR ONNX 模型和字典。Windows 电脑只需要解压运行，不需要安装 Node.js，也不需要连接 GitHub。首次运行后的配置和运行态文件会写入用户数据目录，程序目录可以保持只读。
+
+打包后的 Windows exe 默认会启动内置 OCR worker。开发态仍需使用 `npm run overlay:ocr:dev` 显式开启；如果需要临时关闭打包版 OCR，可设置 `OCR_ENABLED=0`。
 
 ## 无授权设计
 

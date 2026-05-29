@@ -12,6 +12,11 @@
     "display": 0,
     "pollMs": 120,
     "debugDir": "runtime/ocr-debug",
+    "preprocess": {
+      "scale": 2,
+      "grayscale": true,
+      "sharpen": false
+    },
     "cards": [
       {
         "name": "left",

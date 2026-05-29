@@ -24,6 +24,11 @@ function defaultOcrConfig(env = process.env) {
       display: Number(env.OCR_DISPLAY || 0),
       pollMs: Number(env.OCR_POLL_MS || 120),
       debugDir: 'runtime/ocr-debug',
+      preprocess: {
+        scale: Number(env.OCR_CROP_SCALE || 2),
+        grayscale: parseBool(env.OCR_CROP_GRAYSCALE, true),
+        sharpen: parseBool(env.OCR_CROP_SHARPEN, false),
+      },
       cards: DEFAULT_CARD_ROIS,
     },
     automation: {
@@ -101,6 +106,10 @@ function mergeOcrConfig(base, override = {}) {
     capture: {
       ...base.capture,
       ...(override.capture || {}),
+      preprocess: {
+        ...base.capture.preprocess,
+        ...(override.capture?.preprocess || {}),
+      },
       cards: override.capture?.cards || base.capture.cards,
     },
     automation: {
@@ -139,6 +148,7 @@ function normalizeOcrConfig(config) {
       ...config.capture,
       display: Math.max(0, Math.round(numberOr(config.capture?.display, 0))),
       pollMs: Math.max(50, Math.round(numberOr(config.capture?.pollMs, 120))),
+      preprocess: normalizePreprocess(config.capture?.preprocess),
       cards: normalizeCards(config.capture?.cards),
     },
     automation: normalizeAutomation(config.automation),
@@ -146,6 +156,15 @@ function normalizeOcrConfig(config) {
     output: {
       ...config.output,
     },
+  }
+}
+
+function normalizePreprocess(preprocess = {}) {
+  return {
+    ...preprocess,
+    scale: clamp(numberOr(preprocess.scale, 2), 1, 4),
+    grayscale: preprocess.grayscale !== false,
+    sharpen: preprocess.sharpen === true,
   }
 }
 

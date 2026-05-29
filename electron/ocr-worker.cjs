@@ -46,18 +46,34 @@ async function main() {
 function runLoop(config, recognizer, lcuGameState) {
   const loopState = {
     running: false,
+    timer: null,
+    pendingCommands: [],
+    wakeAfterRun: false,
     lastActiveAt: 0,
     lastPassiveEmitAt: 0,
     lastPassiveKey: '',
   }
 
-  const tick = async () => {
-    if (loopState.running) return
+  let tick
+  const schedule = (delayMs = 0) => {
+    if (loopState.timer) clearTimeout(loopState.timer)
+    loopState.timer = setTimeout(tick, Math.max(0, delayMs))
+  }
+
+  tick = async () => {
+    loopState.timer = null
+    if (loopState.running) {
+      loopState.wakeAfterRun = true
+      return
+    }
 
     loopState.running = true
     let nextPollMs = config.capture.pollMs
     try {
-      nextPollMs = await runGatedFrame(config, recognizer, loopState, lcuGameState)
+      const command = loopState.pendingCommands.shift()
+      nextPollMs = command
+        ? await runCommandFrame(config, recognizer, loopState, lcuGameState, command)
+        : await runGatedFrame(config, recognizer, loopState, lcuGameState)
     } catch (error) {
       emitState(config, {
         error: `OCR failed: ${error.message}`,
@@ -72,11 +88,105 @@ function runLoop(config, recognizer, lcuGameState) {
       nextPollMs = config.automation?.gamePollMs || 500
     } finally {
       loopState.running = false
-      setTimeout(tick, nextPollMs)
+      const shouldWakeImmediately = loopState.wakeAfterRun || loopState.pendingCommands.length > 0
+      loopState.wakeAfterRun = false
+      schedule(shouldWakeImmediately ? 0 : nextPollMs)
     }
   }
 
-  tick()
+  setupCommandInput(loopState, schedule)
+  schedule(0)
+}
+
+function setupCommandInput(loopState, schedule) {
+  let buffer = ''
+  process.stdin.setEncoding('utf8')
+  process.stdin.on('data', (chunk) => {
+    buffer += chunk
+    const lines = buffer.split(/\r?\n/)
+    buffer = lines.pop() || ''
+
+    for (const line of lines) {
+      if (!line.trim()) continue
+      const command = parseCommand(line)
+      if (!command) continue
+      if (command.type === 'reset') {
+        loopState.pendingCommands = [command]
+      } else {
+        loopState.pendingCommands.push(command)
+      }
+      if (loopState.running) loopState.wakeAfterRun = true
+      schedule(0)
+    }
+  })
+  process.stdin.resume()
+}
+
+function parseCommand(line) {
+  try {
+    const payload = JSON.parse(line)
+    const type = String(payload?.type || '')
+    if (['recognize-now', 'refresh-hero', 'reset'].includes(type)) {
+      return {
+        type,
+        requestedAt: payload.requestedAt || new Date().toISOString(),
+      }
+    }
+  } catch (error) {
+    emitLog(`ignored invalid command: ${error.message}`)
+  }
+  return null
+}
+
+async function runCommandFrame(config, recognizer, loopState, lcuGameState, command) {
+  if (command.type === 'reset') {
+    loopState.lastActiveAt = 0
+    emitState(config, {
+      candidates: [],
+      ocr: {
+        ready: true,
+        engine: 'paddleocr-onnx',
+        phase: 'reset',
+        active: false,
+        targetMs: 500,
+        command,
+      },
+    })
+    return config.capture.pollMs
+  }
+
+  const lcu = await lcuGameState.snapshot()
+
+  if (command.type === 'refresh-hero') {
+    emitState(config, {
+      championId: lcu.championId || config.championId,
+      candidates: [],
+      ocr: {
+        ready: true,
+        engine: 'paddleocr-onnx',
+        phase: 'hero-refreshed',
+        active: false,
+        targetMs: 500,
+        lcu,
+        command,
+      },
+    })
+    return config.capture.pollMs
+  }
+
+  const startedAt = performance.now()
+  const screenBuffer = await captureScreen(config.capture.display)
+  await recognizeFrame(config, recognizer, screenBuffer, {
+    championId: lcu.championId,
+    lcu,
+    startedAt,
+    trigger: {
+      active: true,
+      reason: 'manual-hotkey',
+    },
+    command,
+  })
+  return config.capture.pollMs
 }
 
 async function runGatedFrame(config, recognizer, loopState, lcuGameState) {
@@ -187,7 +297,7 @@ async function recognizeFrame(config, recognizer, screenBuffer, context = {}) {
   const debugDir = process.env.OCR_DEBUG === '1'
     ? writablePath(config.capture.debugDir || 'runtime/ocr-debug')
     : ''
-  const { screen, crops } = await cropRegions(screenBuffer, config.capture.cards, debugDir)
+  const { screen, crops } = await cropRegions(screenBuffer, config.capture.cards, debugDir, config.capture.preprocess)
 
   const cards = []
   for (const crop of crops) {
@@ -221,6 +331,7 @@ async function recognizeFrame(config, recognizer, screenBuffer, context = {}) {
       game: context.game,
       lcu: context.lcu,
       trigger: context.trigger,
+      command: context.command,
     },
   })
 }

@@ -11,7 +11,7 @@ async function captureScreen(displayIndex = 0) {
   return screenshot(options)
 }
 
-async function cropRegions(imageBuffer, regions, debugDir = '') {
+async function cropRegions(imageBuffer, regions, debugDir = '', preprocess = {}) {
   const image = sharp(imageBuffer).rotate()
   const metadata = await image.metadata()
   const screen = {
@@ -22,9 +22,13 @@ async function cropRegions(imageBuffer, regions, debugDir = '') {
   const crops = []
   for (const region of regions) {
     const roi = toPixelRoi(region.titleRoi || region.roi || region, screen)
-    const buffer = await sharp(imageBuffer)
-      .rotate()
-      .extract(roi)
+    const buffer = await applyCropPreprocess(
+      sharp(imageBuffer)
+        .rotate()
+        .extract(roi),
+      roi,
+      preprocess,
+    )
       .png()
       .toBuffer()
 
@@ -43,6 +47,30 @@ async function cropRegions(imageBuffer, regions, debugDir = '') {
   }
 
   return { screen, crops }
+}
+
+function applyCropPreprocess(pipeline, roi, preprocess = {}) {
+  let next = pipeline
+  const scale = clamp(Number(preprocess.scale || 1), 1, 4)
+
+  if (scale > 1) {
+    next = next.resize({
+      width: Math.max(1, Math.round(roi.width * scale)),
+      height: Math.max(1, Math.round(roi.height * scale)),
+      fit: 'fill',
+      kernel: 'cubic',
+    })
+  }
+
+  if (preprocess.grayscale !== false) {
+    next = next.grayscale()
+  }
+
+  if (preprocess.sharpen === true) {
+    next = next.sharpen()
+  }
+
+  return next
 }
 
 function toPixelRoi(region, screen) {
@@ -71,6 +99,7 @@ function clamp(value, min, max) {
 }
 
 module.exports = {
+  applyCropPreprocess,
   captureScreen,
   cropRegions,
   toPixelRoi,
